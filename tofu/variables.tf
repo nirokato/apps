@@ -25,7 +25,7 @@ variable "projects" {
       subdomain = "apps"
     }
     clock = {
-      subdomain = "clock"
+      subdomain = "clock.apps"
     }
   }
 }
