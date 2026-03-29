@@ -16,16 +16,7 @@ variable "domain" {
 }
 
 variable "projects" {
-  description = "Map of projects to deploy as Cloudflare Pages projects"
-  type = map(object({
-    subdomain = string
-  }))
-  default = {
-    homepage = {
-      subdomain = "apps"
-    }
-    clock = {
-      subdomain = "clock.apps"
-    }
-  }
+  description = "Map of project names. Key = project name, used as subdomain under apps.andymolenda.com. 'homepage' is special — serves apps.andymolenda.com root."
+  type        = set(string)
+  default     = ["homepage", "clock"]
 }

@@ -3,11 +3,12 @@ data "cloudflare_zone" "zone" {
 }
 
 locals {
+  # Homepage gets "apps.andymolenda.com", all others get "<name>.apps.andymolenda.com"
   project_configs = {
-    for key, project in var.projects : key => {
-      subdomain  = project.subdomain
-      fqdn       = "${project.subdomain}.${var.domain}"
-      pages_name = "andy-apps-${key}"
+    for name in var.projects : name => {
+      subdomain  = name == "homepage" ? "apps" : "${name}.apps"
+      fqdn       = name == "homepage" ? "apps.${var.domain}" : "${name}.apps.${var.domain}"
+      pages_name = "andy-apps-${name}"
     }
   }
 }
