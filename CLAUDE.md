@@ -18,9 +18,10 @@ tofu/                # OpenTofu infrastructure (Cloudflare Pages + DNS)
 
 1. Create `projects/<project-name>/` with an `index.html`
 2. Add the project name to the `projects` set in `tofu/variables.tf` — subdomain is derived automatically (`<name>.apps.andymolenda.com`). Do NOT specify a subdomain manually.
-3. Add the project to the deploy matrix in `.github/workflows/deploy.yml` (note: the Claude GitHub Action cannot modify workflow files — this step must be done manually or via local CLI)
-4. Update `projects/homepage/index.html` to link to the new project
-5. Update the project table below
+3. Update `projects/homepage/index.html` to link to the new project
+4. Update the project table below
+
+The deploy matrix is auto-discovered from the `projects/` directory — no workflow file changes needed.
 
 ## Projects
 

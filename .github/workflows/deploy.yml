@@ -120,21 +120,33 @@ jobs:
           TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
+  discover:
+    name: Discover projects
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.scan.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Scan projects directory
+        id: scan
+        run: |
+          matrix=$(ls -d projects/*/ | while read dir; do
+            name=$(basename "$dir")
+            echo "{\"name\":\"$name\",\"pages_project\":\"andy-apps-$name\",\"directory\":\"projects/$name\"}"
+          done | jq -s -c '{project: .}')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
   deploy:
     name: Deploy ${{ matrix.project.name }}
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: infra
+    needs: [infra, discover]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        project:
-          - name: homepage
-            pages-project: andy-apps-homepage
-            directory: projects/homepage
-          - name: clock
-            pages-project: andy-apps-clock
-            directory: projects/clock
+      matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -144,4 +156,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy ${{ matrix.project.directory }} --project-name=${{ matrix.project.pages-project }} --branch=main
+          command: pages deploy ${{ matrix.project.directory }} --project-name=${{ matrix.project.pages_project }} --branch=main
