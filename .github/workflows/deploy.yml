@@ -132,6 +132,9 @@ jobs:
           - name: homepage
             pages-project: andy-apps-homepage
             directory: projects/homepage
+          - name: clock
+            pages-project: andy-apps-clock
+            directory: projects/clock
     steps:
       - name: Checkout
         uses: actions/checkout@v4
