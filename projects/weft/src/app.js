@@ -8,7 +8,7 @@ import { exportToFile, importFromFile } from './export.js';
 
 class DB {
   constructor() {
-    this.worker = new Worker('./src/db-worker.js');
+    this.worker = new Worker('./src/db-worker.js', { type: 'module' });
     this.pending = new Map();
     this.nextId = 0;
     this.worker.onmessage = (e) => {

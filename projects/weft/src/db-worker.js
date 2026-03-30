@@ -1,18 +1,15 @@
-// Database Web Worker — SQLite via sql.js with IndexedDB persistence
-// Phase 1: local-only, no cr-sqlite CRR extensions yet
-// Phase 3+: swap sql.js for @vlcn.io/crsqlite-wasm, enable crsql_as_crr()
+// Database Web Worker — cr-sqlite (SQLite + CRDT) with automatic IndexedDB persistence
+// Uses @vlcn.io/crsqlite-wasm for conflict-free replicated relations
 
-importScripts('https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.11.0/sql-wasm.js');
-
-const DB_NAME = 'weft';
-const DB_STORE = 'data';
-const DB_KEY = 'db';
+import initWasm from '../lib/crsqlite/index.js';
 
 let db = null;
-let idb = null; // cached IndexedDB connection
 
-// Schema uses individual statements for clarity — executed via db.exec()
-const SCHEMA = `
+// --- Schema ---
+// Tables promoted to CRR (Conflict-free Replicated Relation) get automatic
+// CRDT merge via crsql_changes. local_identity and read_cursors are local-only.
+
+const SCHEMA_TABLES = `
 CREATE TABLE IF NOT EXISTS local_identity (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     public_key TEXT NOT NULL,
@@ -21,27 +18,27 @@ CREATE TABLE IF NOT EXISTS local_identity (
 );
 
 CREATE TABLE IF NOT EXISTS rooms (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    created_by TEXT NOT NULL,
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE TABLE IF NOT EXISTS members (
-    room_id TEXT NOT NULL REFERENCES rooms(id),
-    public_key TEXT NOT NULL,
-    display_name TEXT NOT NULL,
+    room_id TEXT NOT NULL DEFAULT '',
+    public_key TEXT NOT NULL DEFAULT '',
+    display_name TEXT NOT NULL DEFAULT '',
     role TEXT NOT NULL DEFAULT 'member',
     joined_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (room_id, public_key)
 );
 
 CREATE TABLE IF NOT EXISTS messages (
-    id TEXT PRIMARY KEY,
-    room_id TEXT NOT NULL REFERENCES rooms(id),
-    topic TEXT NOT NULL,
-    sender_key TEXT NOT NULL,
-    content TEXT NOT NULL,
+    id TEXT PRIMARY KEY NOT NULL,
+    room_id TEXT NOT NULL DEFAULT '',
+    topic TEXT NOT NULL DEFAULT '',
+    sender_key TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     edited_at TEXT,
     deleted INTEGER NOT NULL DEFAULT 0
@@ -60,72 +57,26 @@ CREATE TABLE IF NOT EXISTS read_cursors (
 );
 `;
 
-// --- IndexedDB helpers ---
-
-async function getIDB() {
-  if (idb) return idb;
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(DB_STORE);
-    req.onsuccess = () => { idb = req.result; resolve(idb); };
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function loadFromIDB() {
-  const conn = await getIDB();
-  return new Promise((resolve, reject) => {
-    const tx = conn.transaction(DB_STORE, 'readonly');
-    const req = tx.objectStore(DB_STORE).get(DB_KEY);
-    req.onsuccess = () => resolve(req.result || null);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function saveToIDB() {
-  if (!db) return;
-  const data = db.export();
-  const conn = await getIDB();
-  return new Promise((resolve, reject) => {
-    const tx = conn.transaction(DB_STORE, 'readwrite');
-    tx.objectStore(DB_STORE).put(data, DB_KEY);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
+// CRR promotion — rooms, members, messages get CRDT merge support
+const CRR_TABLES = ['rooms', 'members', 'messages'];
 
 // --- Initialization ---
 
 async function init() {
-  const SQL = await initSqlJs({
-    locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.11.0/${file}`
-  });
+  const sqlite = await initWasm();
+  db = await sqlite.open('weft');
 
-  const saved = await loadFromIDB();
-  db = saved ? new SQL.Database(new Uint8Array(saved)) : new SQL.Database();
-  db.exec(SCHEMA);
-  await saveToIDB();
-  return { ok: true };
-}
+  // Create tables — execute each statement individually to avoid splitting issues
+  for (const stmt of SCHEMA_TABLES.split(/;\s*\n/).filter(s => s.trim())) {
+    await db.exec(stmt.trim());
+  }
 
-// --- Query helpers ---
+  // Promote to CRRs (idempotent — safe to call on existing CRR tables)
+  for (const table of CRR_TABLES) {
+    await db.exec(`SELECT crsql_as_crr('${table}')`);
+  }
 
-function queryAll(sql, params) {
-  const stmt = db.prepare(sql);
-  if (params) stmt.bind(params);
-  const rows = [];
-  while (stmt.step()) rows.push(stmt.getAsObject());
-  stmt.free();
-  return rows;
-}
-
-function queryOne(sql, params) {
-  const rows = queryAll(sql, params);
-  return rows[0] || null;
-}
-
-function run(sql, params) {
-  db.run(sql, params);
+  return { ok: true, siteId: db.siteid };
 }
 
 // --- Action handlers ---
@@ -135,39 +86,41 @@ const actions = {
     return init();
   },
 
-  getIdentity() {
-    return queryOne('SELECT * FROM local_identity WHERE id = 1');
+  async getIdentity() {
+    const rows = await db.execO('SELECT * FROM local_identity WHERE id = 1');
+    return rows[0] || null;
   },
 
   async createIdentity({ publicKey, displayName }) {
-    run(
+    await db.exec(
       'INSERT OR REPLACE INTO local_identity (id, public_key, display_name) VALUES (1, ?, ?)',
       [publicKey, displayName]
     );
-    await saveToIDB();
-    return queryOne('SELECT * FROM local_identity WHERE id = 1');
+    const rows = await db.execO('SELECT * FROM local_identity WHERE id = 1');
+    return rows[0] || null;
   },
 
-  getRooms() {
-    return queryAll('SELECT * FROM rooms ORDER BY created_at DESC');
+  async getRooms() {
+    return db.execO('SELECT * FROM rooms ORDER BY created_at DESC');
   },
 
   async createRoom({ id, name, createdBy }) {
-    run('INSERT INTO rooms (id, name, created_by) VALUES (?, ?, ?)', [id, name, createdBy]);
-    run(
+    await db.exec('INSERT INTO rooms (id, name, created_by) VALUES (?, ?, ?)', [id, name, createdBy]);
+    await db.exec(
       'INSERT INTO members (room_id, public_key, display_name, role) VALUES (?, ?, ?, ?)',
       [id, createdBy, '', 'owner']
     );
-    await saveToIDB();
-    return queryOne('SELECT * FROM rooms WHERE id = ?', [id]);
+    const rows = await db.execO('SELECT * FROM rooms WHERE id = ?', [id]);
+    return rows[0] || null;
   },
 
-  getRoom({ roomId }) {
-    return queryOne('SELECT * FROM rooms WHERE id = ?', [roomId]);
+  async getRoom({ roomId }) {
+    const rows = await db.execO('SELECT * FROM rooms WHERE id = ?', [roomId]);
+    return rows[0] || null;
   },
 
-  getTopics({ roomId }) {
-    return queryAll(`
+  async getTopics({ roomId }) {
+    return db.execO(`
       SELECT topic,
              COUNT(*) as message_count,
              MAX(created_at) as last_activity,
@@ -179,8 +132,8 @@ const actions = {
     `, [roomId]);
   },
 
-  getUnreadCounts({ roomId }) {
-    return queryAll(`
+  async getUnreadCounts({ roomId }) {
+    return db.execO(`
       SELECT m.topic, COUNT(*) as unread
       FROM messages m
       LEFT JOIN read_cursors rc ON rc.room_id = m.room_id AND rc.topic = m.topic
@@ -190,8 +143,8 @@ const actions = {
     `, [roomId]);
   },
 
-  getMessages({ roomId, topic, limit, offset }) {
-    return queryAll(`
+  async getMessages({ roomId, topic, limit, offset }) {
+    return db.execO(`
       SELECT m.id, m.content, m.sender_key, m.created_at, m.topic,
              mem.display_name as sender_name
       FROM messages m
@@ -203,52 +156,51 @@ const actions = {
   },
 
   async postMessage({ id, roomId, topic, senderKey, content }) {
-    run(
+    await db.exec(
       'INSERT INTO messages (id, room_id, topic, sender_key, content) VALUES (?, ?, ?, ?, ?)',
       [id, roomId, topic, senderKey, content]
     );
-    await saveToIDB();
-    return queryOne('SELECT * FROM messages WHERE id = ?', [id]);
+    const rows = await db.execO('SELECT * FROM messages WHERE id = ?', [id]);
+    return rows[0] || null;
   },
 
   async markRead({ roomId, topic, messageId }) {
-    run(
+    await db.exec(
       `INSERT OR REPLACE INTO read_cursors (room_id, topic, last_read_id, last_read_at)
        VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
       [roomId, topic, messageId]
     );
-    await saveToIDB();
   },
 
   async updateMemberName({ roomId, publicKey, displayName }) {
-    run(
+    await db.exec(
       'UPDATE members SET display_name = ? WHERE room_id = ? AND public_key = ?',
       [displayName, roomId, publicKey]
     );
-    await saveToIDB();
   },
 
   async addMember({ roomId, publicKey, displayName, role }) {
-    run(
+    await db.exec(
       'INSERT OR IGNORE INTO members (room_id, public_key, display_name, role) VALUES (?, ?, ?, ?)',
       [roomId, publicKey, displayName, role || 'member']
     );
-    await saveToIDB();
   },
 
-  getMembers({ roomId }) {
-    return queryAll('SELECT * FROM members WHERE room_id = ? ORDER BY joined_at ASC', [roomId]);
+  async getMembers({ roomId }) {
+    return db.execO('SELECT * FROM members WHERE room_id = ? ORDER BY joined_at ASC', [roomId]);
   },
 
-  exportRoom({ roomId }) {
-    const room = queryOne('SELECT * FROM rooms WHERE id = ?', [roomId]);
+  async exportRoom({ roomId }) {
+    const rooms = await db.execO('SELECT * FROM rooms WHERE id = ?', [roomId]);
+    const room = rooms[0];
     if (!room) return null;
-    const members = queryAll('SELECT * FROM members WHERE room_id = ?', [roomId]);
-    const messages = queryAll(
+    const members = await db.execO('SELECT * FROM members WHERE room_id = ?', [roomId]);
+    const messages = await db.execO(
       'SELECT * FROM messages WHERE room_id = ? ORDER BY created_at ASC',
       [roomId]
     );
-    const identity = queryOne('SELECT * FROM local_identity WHERE id = 1');
+    const identities = await db.execO('SELECT * FROM local_identity WHERE id = 1');
+    const identity = identities[0];
     return {
       weft_version: 1,
       format: 'weft-export-v1',
@@ -282,31 +234,30 @@ const actions = {
   async importRoom({ data }) {
     const { room, members, messages } = data;
 
-    run(
+    await db.exec(
       'INSERT OR IGNORE INTO rooms (id, name, created_by, created_at) VALUES (?, ?, ?, ?)',
       [room.id, room.name, room.created_by, room.created_at]
     );
 
     for (const m of members) {
-      run(
+      await db.exec(
         'INSERT OR IGNORE INTO members (room_id, public_key, display_name, role, joined_at) VALUES (?, ?, ?, ?, ?)',
         [room.id, m.public_key, m.display_name, m.role, m.joined_at]
       );
     }
 
     for (const m of messages) {
-      run(
+      await db.exec(
         'INSERT OR IGNORE INTO messages (id, room_id, topic, sender_key, content, created_at, edited_at, deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         [m.id, room.id, m.topic, m.sender_key, m.content, m.created_at, m.edited_at || null, m.deleted || 0]
       );
     }
 
-    await saveToIDB();
     return { roomId: room.id };
   },
 
-  searchMessages({ roomId, query, limit }) {
-    return queryAll(
+  async searchMessages({ roomId, query, limit }) {
+    return db.execO(
       `SELECT id, topic, content, created_at, sender_key
        FROM messages
        WHERE room_id = ? AND content LIKE '%' || ? || '%' AND deleted = 0
@@ -314,7 +265,42 @@ const actions = {
        LIMIT ?`,
       [roomId, query, limit || 20]
     );
-  }
+  },
+
+  // --- Sync primitives (for Phase 4: Veilid P2P sync) ---
+
+  async getDbVersion() {
+    const rows = await db.execA('SELECT crsql_db_version()');
+    return rows[0][0];
+  },
+
+  async getSiteId() {
+    return db.siteid;
+  },
+
+  async getChanges({ sinceVersion, limit }) {
+    return db.execA(
+      `SELECT "table", "pk", "cid", "val", "col_version", "db_version",
+              "site_id", "cl", "seq"
+       FROM crsql_changes
+       WHERE db_version > ?
+       ORDER BY db_version ASC
+       LIMIT ?`,
+      [sinceVersion || 0, limit || 1000]
+    );
+  },
+
+  async applyChanges({ changes }) {
+    await db.tx(async (tx) => {
+      for (const c of changes) {
+        await tx.exec(
+          `INSERT INTO crsql_changes ("table", "pk", "cid", "val", "col_version",
+           "db_version", "site_id", "cl", "seq") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          c
+        );
+      }
+    });
+  },
 };
 
 // --- Message handler ---
