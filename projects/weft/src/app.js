@@ -1,6 +1,4 @@
-// Main thread orchestrator — bridges DB Worker ↔ UI
-// Phase 1: local-only identity + room management
-// Phase 3+: add Veilid Worker bridge
+// Main thread orchestrator — bridges DB Worker + Veilid Worker ↔ UI
 
 import { ulid } from './ulid.js';
 import { renderApp } from './ui.js';
@@ -68,6 +66,78 @@ class DB {
   }
 }
 
+// --- Veilid Worker interface ---
+
+class Veilid {
+  constructor(onUpdate) {
+    this.worker = new Worker('./src/veilid-worker.js', { type: 'module' });
+    this.pending = new Map();
+    this.nextId = 0;
+    this.onUpdate = onUpdate;
+    this.worker.onmessage = (e) => {
+      const { id, result, error, type, update } = e.data;
+      if (type === 'update') {
+        this.onUpdate(update);
+        return;
+      }
+      const p = this.pending.get(id);
+      if (!p) return;
+      this.pending.delete(id);
+      if (error) p.reject(new Error(error));
+      else p.resolve(result);
+    };
+    this.worker.onerror = (e) => {
+      console.error('Veilid worker error:', e);
+    };
+  }
+
+  call(action, params) {
+    return new Promise((resolve, reject) => {
+      const id = this.nextId++;
+      this.pending.set(id, { resolve, reject });
+      this.worker.postMessage({ id, action, params });
+    });
+  }
+
+  init(bootstrapUrl) { return this.call('init', { bootstrapUrl }); }
+  generateKeyPair() { return this.call('generateKeyPair'); }
+  setIdentity(publicKey, secretKey) {
+    return this.call('setIdentity', { publicKey, secretKey });
+  }
+  createPrivateRoute() { return this.call('createPrivateRoute'); }
+  importRoute(blob) { return this.call('importRoute', { blob }); }
+  createDHTRecord(schema) { return this.call('createDHTRecord', { schema }); }
+  openDHTRecord(key, writer) { return this.call('openDHTRecord', { key, writer }); }
+  closeDHTRecord(key) { return this.call('closeDHTRecord', { key }); }
+  getDHTValue(key, subkey, forceRefresh) {
+    return this.call('getDHTValue', { key, subkey, forceRefresh });
+  }
+  setDHTValue(key, subkey, data) {
+    return this.call('setDHTValue', { key, subkey, data });
+  }
+  watchDHTValues(key, subkeys, expiration, count) {
+    return this.call('watchDHTValues', { key, subkeys, expiration, count });
+  }
+  sendAppMessage(target, message) {
+    return this.call('sendAppMessage', { target, message });
+  }
+  sendAppCall(target, request) {
+    return this.call('sendAppCall', { target, request });
+  }
+  replyAppCall(callId, message) {
+    return this.call('replyAppCall', { callId, message });
+  }
+  encryptMessage(data, sharedSecret) {
+    return this.call('encryptMessage', { data, sharedSecret });
+  }
+  decryptMessage(ciphertext, nonce, sharedSecret) {
+    return this.call('decryptMessage', { ciphertext, nonce, sharedSecret });
+  }
+  generateSharedSecret() { return this.call('generateSharedSecret'); }
+  getState() { return this.call('getState'); }
+  shutdown() { return this.call('shutdown'); }
+}
+
 // --- App state ---
 
 const state = {
@@ -83,9 +153,15 @@ const state = {
   searchQuery: '',
   searchResults: null,
   error: null,
+  // Veilid connection state
+  veilidState: 'loading', // loading | connecting | connected | offline | error
+  veilidError: null,
 };
 
 let db;
+let veilid;
+
+const BOOTSTRAP_URL = 'wss://veilid.andymolenda.com/ws';
 
 // --- State helpers ---
 
@@ -96,6 +172,59 @@ function setState(patch) {
 
 function render() {
   renderApp(state, handlers);
+}
+
+// --- Veilid update handler ---
+
+function handleVeilidUpdate(update) {
+  if (!update) return;
+
+  // Attachment state changes
+  if (update.kind === 'Attachment') {
+    const attachState = update.state;
+    if (attachState === 'AttachedGood' || attachState === 'AttachedStrong' || attachState === 'FullyAttached') {
+      setState({ veilidState: 'connected' });
+    } else if (attachState === 'AttachedWeak' || attachState === 'Attaching') {
+      setState({ veilidState: 'connecting' });
+    } else if (attachState === 'Detached' || attachState === 'Detaching') {
+      setState({ veilidState: 'offline' });
+    } else if (attachState === 'OverAttached') {
+      setState({ veilidState: 'connected' });
+    }
+  }
+
+  // AppMessage received — real-time message from a peer
+  if (update.kind === 'AppMessage') {
+    handleAppMessage(update);
+  }
+
+  // AppCall received — sync request from a peer
+  if (update.kind === 'AppCall') {
+    handleAppCall(update);
+  }
+
+  // ValueChange — DHT watch notification
+  if (update.kind === 'ValueChange') {
+    handleValueChange(update);
+  }
+}
+
+async function handleAppMessage(update) {
+  // update: { kind: 'AppMessage', message: Uint8Array, sender: ... }
+  // For now, log it. Full message handling comes with room integration.
+  console.log('[Veilid] AppMessage received:', update);
+}
+
+async function handleAppCall(update) {
+  // update: { kind: 'AppCall', call_id: string, message: Uint8Array, sender: ... }
+  console.log('[Veilid] AppCall received:', update);
+  // TODO: handle sync requests
+}
+
+async function handleValueChange(update) {
+  // update: { kind: 'ValueChange', key: string, subkeys: [...], count: number, value: ... }
+  console.log('[Veilid] ValueChange:', update);
+  // TODO: handle presence updates
 }
 
 // --- Handlers (passed to UI) ---
@@ -279,13 +408,13 @@ const handlers = {
 
 async function boot() {
   try {
+    // 1. Initialize DB
     db = new DB();
     await db.init();
 
-    // Load or create identity
+    // 2. Load or create identity
     let identity = await db.getIdentity();
     if (!identity) {
-      // Phase 1: generate a random local key (placeholder for Veilid keypair)
       const keyBytes = new Uint8Array(32);
       crypto.getRandomValues(keyBytes);
       const publicKey = 'LOCAL:' + Array.from(keyBytes.slice(0, 16))
@@ -299,9 +428,40 @@ async function boot() {
       identity,
       rooms,
     });
+
+    // 3. Initialize Veilid (async, non-blocking — UI is already interactive)
+    bootVeilid();
   } catch (e) {
     setState({ phase: 'loading', error: 'Failed to initialize: ' + e.message });
   }
 }
 
+async function bootVeilid() {
+  try {
+    setState({ veilidState: 'loading' });
+    veilid = new Veilid(handleVeilidUpdate);
+    await veilid.init(BOOTSTRAP_URL);
+    setState({ veilidState: 'connecting' });
+
+    // Generate Veilid identity if we're still using a LOCAL: placeholder
+    if (state.identity && state.identity.public_key.startsWith('LOCAL:')) {
+      try {
+        const kp = await veilid.generateKeyPair();
+        // Update identity with real Veilid public key
+        const newIdentity = await db.createIdentity(kp.publicKey, state.identity.display_name);
+        setState({ identity: newIdentity });
+      } catch (e) {
+        console.warn('Failed to generate Veilid keypair, keeping local identity:', e);
+      }
+    }
+  } catch (e) {
+    console.error('Veilid init failed:', e);
+    setState({
+      veilidState: 'error',
+      veilidError: e.message || 'Failed to connect to Veilid network',
+    });
+  }
+}
+
 boot();
+
