@@ -12,6 +12,7 @@ Monorepo for small projects hosted under **apps.andymolenda.com**. Each project 
 projects/
   homepage/          # Landing page (serves apps.andymolenda.com)
   clock/             # World clock across timezones
+  weft/              # Local-first topic-threaded P2P chat
 tofu/                # OpenTofu infrastructure (Cloudflare Pages + DNS)
 .github/workflows/
   deploy.yml         # Infrastructure (tofu plan/apply) + production deployment
@@ -34,6 +35,7 @@ The deploy matrix is auto-discovered from the `projects/` directory — **no wor
 |---------|------|-----|-------------|
 | homepage | `projects/homepage/` | `apps.andymolenda.com` | Landing page and project directory |
 | clock | `projects/clock/` | `clock.apps.andymolenda.com` | World clock across timezones |
+| weft | `projects/weft/` | `weft.apps.andymolenda.com` | Local-first topic-threaded P2P chat on Veilid + cr-sqlite |
 
 ## Design system
 
@@ -86,6 +88,7 @@ When adding a project to the homepage, follow this exact pattern:
 - **Single-file preferred.** Keep everything in one `index.html` unless complexity demands splitting.
 - **Infrastructure as Code:** OpenTofu (v1.8+) with Cloudflare provider (~> 4.0).
 - **No test framework or linter** is currently configured.
+- **Exception: Weft** uses vendored WASM binaries (Veilid, cr-sqlite) in `wasm/` and `lib/`. These are pre-built artifacts, not compiled in the deploy workflow. The application JS remains unbundled native ES modules consistent with repo conventions.
 
 ## Deployment
 
