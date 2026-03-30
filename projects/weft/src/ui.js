@@ -3,6 +3,15 @@ import { html, render } from 'https://cdn.jsdelivr.net/npm/lit-html@3/+esm';
 
 const root = () => document.getElementById('app');
 
+// Debounce helper for search
+let searchTimer = null;
+function debounce(fn, ms) {
+  return (...args) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => fn(...args), ms);
+  };
+}
+
 function formatTime(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -43,7 +52,7 @@ function renderSetup(state, h) {
 
       <div class="identity-bar">
         <span class="label">Your name:</span>
-        <input type="text" class="input inline-input" value="${state.identity.display_name}"
+        <input type="text" class="input inline-input" .value=${state.identity.display_name}
           @keydown=${(e) => { if (e.key === 'Enter') h.updateDisplayName(e.target.value); }}
           @blur=${(e) => h.updateDisplayName(e.target.value)}
           placeholder="Enter your name">
@@ -117,7 +126,7 @@ function renderChat(state, h) {
       <div class="search-bar">
         <input type="text" class="input search-input" placeholder="Search topics..."
           .value=${state.searchQuery}
-          @input=${(e) => h.search(e.target.value)}>
+          @input=${debounce((e) => h.search(e.target.value), 200)}>
         ${state.searchQuery ? html`
           <button class="btn-icon search-clear" @click=${h.clearSearch}>&times;</button>
         ` : ''}
@@ -263,7 +272,7 @@ function renderSettings(state, h) {
         <div class="setting-group">
           <h3>Identity</h3>
           <label class="setting-label">Display name</label>
-          <input type="text" class="input" value="${state.identity.display_name}"
+          <input type="text" class="input" .value=${state.identity.display_name}
             @blur=${(e) => h.updateDisplayName(e.target.value)}
             @keydown=${(e) => { if (e.key === 'Enter') h.updateDisplayName(e.target.value); }}>
           <label class="setting-label">Public key</label>

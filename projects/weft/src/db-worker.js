@@ -9,7 +9,9 @@ const DB_STORE = 'data';
 const DB_KEY = 'db';
 
 let db = null;
+let idb = null; // cached IndexedDB connection
 
+// Schema uses individual statements for clarity — executed via db.exec()
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS local_identity (
     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -60,19 +62,20 @@ CREATE TABLE IF NOT EXISTS read_cursors (
 
 // --- IndexedDB helpers ---
 
-function openIDB() {
+async function getIDB() {
+  if (idb) return idb;
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1);
     req.onupgradeneeded = () => req.result.createObjectStore(DB_STORE);
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => { idb = req.result; resolve(idb); };
     req.onerror = () => reject(req.error);
   });
 }
 
 async function loadFromIDB() {
-  const idb = await openIDB();
+  const conn = await getIDB();
   return new Promise((resolve, reject) => {
-    const tx = idb.transaction(DB_STORE, 'readonly');
+    const tx = conn.transaction(DB_STORE, 'readonly');
     const req = tx.objectStore(DB_STORE).get(DB_KEY);
     req.onsuccess = () => resolve(req.result || null);
     req.onerror = () => reject(req.error);
@@ -82,9 +85,9 @@ async function loadFromIDB() {
 async function saveToIDB() {
   if (!db) return;
   const data = db.export();
-  const idb = await openIDB();
+  const conn = await getIDB();
   return new Promise((resolve, reject) => {
-    const tx = idb.transaction(DB_STORE, 'readwrite');
+    const tx = conn.transaction(DB_STORE, 'readwrite');
     tx.objectStore(DB_STORE).put(data, DB_KEY);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
@@ -100,7 +103,7 @@ async function init() {
 
   const saved = await loadFromIDB();
   db = saved ? new SQL.Database(new Uint8Array(saved)) : new SQL.Database();
-  db.run(SCHEMA);
+  db.exec(SCHEMA);
   await saveToIDB();
   return { ok: true };
 }
@@ -136,12 +139,12 @@ const actions = {
     return queryOne('SELECT * FROM local_identity WHERE id = 1');
   },
 
-  createIdentity({ publicKey, displayName }) {
+  async createIdentity({ publicKey, displayName }) {
     run(
       'INSERT OR REPLACE INTO local_identity (id, public_key, display_name) VALUES (1, ?, ?)',
       [publicKey, displayName]
     );
-    saveToIDB();
+    await saveToIDB();
     return queryOne('SELECT * FROM local_identity WHERE id = 1');
   },
 
@@ -149,13 +152,13 @@ const actions = {
     return queryAll('SELECT * FROM rooms ORDER BY created_at DESC');
   },
 
-  createRoom({ id, name, createdBy }) {
+  async createRoom({ id, name, createdBy }) {
     run('INSERT INTO rooms (id, name, created_by) VALUES (?, ?, ?)', [id, name, createdBy]);
     run(
       'INSERT INTO members (room_id, public_key, display_name, role) VALUES (?, ?, ?, ?)',
       [id, createdBy, '', 'owner']
     );
-    saveToIDB();
+    await saveToIDB();
     return queryOne('SELECT * FROM rooms WHERE id = ?', [id]);
   },
 
@@ -199,38 +202,38 @@ const actions = {
     `, [roomId, topic, limit || 50, offset || 0]);
   },
 
-  postMessage({ id, roomId, topic, senderKey, content }) {
+  async postMessage({ id, roomId, topic, senderKey, content }) {
     run(
       'INSERT INTO messages (id, room_id, topic, sender_key, content) VALUES (?, ?, ?, ?, ?)',
       [id, roomId, topic, senderKey, content]
     );
-    saveToIDB();
+    await saveToIDB();
     return queryOne('SELECT * FROM messages WHERE id = ?', [id]);
   },
 
-  markRead({ roomId, topic, messageId }) {
+  async markRead({ roomId, topic, messageId }) {
     run(
       `INSERT OR REPLACE INTO read_cursors (room_id, topic, last_read_id, last_read_at)
        VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
       [roomId, topic, messageId]
     );
-    saveToIDB();
+    await saveToIDB();
   },
 
-  updateMemberName({ roomId, publicKey, displayName }) {
+  async updateMemberName({ roomId, publicKey, displayName }) {
     run(
       'UPDATE members SET display_name = ? WHERE room_id = ? AND public_key = ?',
       [displayName, roomId, publicKey]
     );
-    saveToIDB();
+    await saveToIDB();
   },
 
-  addMember({ roomId, publicKey, displayName, role }) {
+  async addMember({ roomId, publicKey, displayName, role }) {
     run(
       'INSERT OR IGNORE INTO members (room_id, public_key, display_name, role) VALUES (?, ?, ?, ?)',
       [roomId, publicKey, displayName, role || 'member']
     );
-    saveToIDB();
+    await saveToIDB();
   },
 
   getMembers({ roomId }) {
@@ -276,7 +279,7 @@ const actions = {
     };
   },
 
-  importRoom({ data }) {
+  async importRoom({ data }) {
     const { room, members, messages } = data;
 
     run(
@@ -298,7 +301,7 @@ const actions = {
       );
     }
 
-    saveToIDB();
+    await saveToIDB();
     return { roomId: room.id };
   },
 
