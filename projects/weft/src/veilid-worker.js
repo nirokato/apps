@@ -48,8 +48,8 @@ async function initVeilid({ bootstrapUrl }) {
   // 2. Initialize core (platform/logging config)
   await veilidClient.initializeCore({
     logging: {
-      api: { enabled: true, level: 'info' },
-      performance: { enabled: false, level: 'info', logs_in_timings: false, logs_in_console: false },
+      api: { enabled: true, level: 'Info' },
+      performance: { enabled: false, level: 'Info', logs_in_timings: false, logs_in_console: false },
     },
   });
 
