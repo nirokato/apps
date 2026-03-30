@@ -1,6 +1,11 @@
 // Veilid Web Worker — P2P networking, identity, DHT, messaging
 // Module worker: loaded with { type: 'module' }
 
+// Veilid WASM expects `window` to exist — polyfill for Worker context
+if (typeof window === 'undefined') {
+  self.window = self;
+}
+
 import init, {
   veilidClient,
   VeilidRoutingContext,
