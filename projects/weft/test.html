@@ -77,7 +77,7 @@
   <script type="module">
     const BOOTSTRAP_URL = 'wss://veilid.andymolenda.com/ws';
     const WASM_JS = './wasm/veilid/veilid_wasm.js';
-    const TIMEOUT_MS = 30000;
+    const TIMEOUT_MS = 60000;
 
     const tests = [
       { id: 'ws', group: 'Connectivity', name: 'WebSocket to bootstrap node', detail: BOOTSTRAP_URL },
@@ -235,8 +235,11 @@
         // Get default config and inspect its structure
         const config = veilidClient.defaultConfig();
 
-        // Set bootstrap to our node
-        config.network.routingTable.bootstrap = [BOOTSTRAP_URL];
+        // Add our node to the default bootstrap list (which includes bootstrap-v1.veilid.net)
+        config.network.routingTable.bootstrap = [
+          ...config.network.routingTable.bootstrap,
+          BOOTSTRAP_URL,
+        ];
         // WS: connect only, no listen (WASM can't listen)
         config.network.protocol.ws.connect = true;
         config.network.protocol.ws.listen = false;

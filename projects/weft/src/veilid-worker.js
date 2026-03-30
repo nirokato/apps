@@ -56,10 +56,13 @@ async function initVeilid({ bootstrapUrl }) {
   // 3. Get default config and customize for browser WASM
   const config = veilidClient.defaultConfig();
 
-  // Set bootstrap to our node
-  config.network.routingTable.bootstrap = bootstrapUrl
-    ? [bootstrapUrl]
-    : ['ws://bootstrap-v1.veilid.net:5150/ws'];
+  // Add our node to the default bootstrap list
+  if (bootstrapUrl) {
+    config.network.routingTable.bootstrap = [
+      ...config.network.routingTable.bootstrap,
+      bootstrapUrl,
+    ];
+  }
   // WS: connect only, no listen (WASM can't listen)
   config.network.protocol.ws.connect = true;
   config.network.protocol.ws.listen = false;
