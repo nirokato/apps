@@ -30,6 +30,23 @@ function senderName(msg, identity) {
   return msg.sender_name || msg.sender_key.slice(0, 12) + '...';
 }
 
+// --- Connection status ---
+
+function renderConnectionStatus(state) {
+  switch (state.veilidState) {
+    case 'connected':
+      return html`<span class="status status-connected">&#9679; connected</span>`;
+    case 'connecting':
+      return html`<span class="status status-connecting">&#9680; connecting...</span>`;
+    case 'loading':
+      return html`<span class="status status-connecting">&#9680; loading...</span>`;
+    case 'error':
+      return html`<span class="status status-error" title="${state.veilidError || ''}">&#9675; error</span>`;
+    default:
+      return html`<span class="status status-offline">&#9675; offline</span>`;
+  }
+}
+
 // --- Loading screen ---
 
 function renderLoading(state) {
@@ -117,7 +134,7 @@ function renderChat(state, h) {
           <span class="header-room">${room.name}</span>
         </div>
         <div class="header-right">
-          <span class="status status-offline">&#9675; local</span>
+          ${renderConnectionStatus(state)}
           <button class="btn-icon" @click=${h.showSettings} title="Settings">&#9881;</button>
         </div>
       </header>
