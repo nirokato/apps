@@ -232,11 +232,10 @@
         setStatus('wasm-init', 'pass');
         log('Veilid core initialized', 'ok');
 
-        // Get default config and modify
+        // Get default config and inspect its structure
         const config = veilidClient.defaultConfig();
-        config.network = config.network || {};
-        config.network.routingTable = config.network.routingTable || {};
-        config.network.routingTable.bootstrap = [BOOTSTRAP_URL];
+        log('Default config: ' + JSON.stringify(config, null, 2));
+
         // Override only what we need — let defaultConfig() handle the rest
         // Disable UDP/TCP (browser can't use raw sockets)
         config.network.protocol.udp.enabled = false;
