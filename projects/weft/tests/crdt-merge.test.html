@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html><head><title>Test: CRDT Merge &amp; Edge Cases</title></head>
+<body>
+<script type="module">
+import { t } from './harness.js';
+
+// --- Worker factory: each gets a unique DB name ---
+function createWorker(dbName) {
+  const worker = new Worker('../src/db-worker.js', { type: 'module' });
+  const pending = new Map();
+  let nextId = 0;
+
+  worker.onmessage = (e) => {
+    const { id, result, error } = e.data;
+    const p = pending.get(id);
+    if (!p) return;
+    pending.delete(id);
+    if (error) p.reject(new Error(error));
+    else p.resolve(result);
+  };
+
+  function call(action, params) {
+    return new Promise((resolve, reject) => {
+      const id = nextId++;
+      pending.set(id, { resolve, reject });
+      worker.postMessage({ id, action, params });
+    });
+  }
+
+  return { worker, call, init: () => call('init', { dbName }) };
+}
+
+// Unique DB names per test run to avoid cross-contamination
+const RUN_ID = Math.random().toString(36).slice(2, 8);
+
+// ============================================================
+// CRDT Merge: Two independent databases converge
+// ============================================================
+
+// Set up two independent peers (Peer A and Peer B) with the same schema
+const peerA = createWorker(`crdt-a-${RUN_ID}`);
+const peerB = createWorker(`crdt-b-${RUN_ID}`);
+
+t.test('crdt: both peers initialize independently', async (a) => {
+  const rA = await peerA.init();
+  const rB = await peerB.init();
+  a.ok(rA.ok && rB.ok, 'both init ok');
+  a.notEqual(rA.siteId, rB.siteId, 'different site IDs');
+});
+
+t.test('crdt: peers create same room independently', async (a) => {
+  await peerA.call('createRoom', { id: 'shared-room', name: 'Shared', createdBy: 'VLD0:alice' });
+  await peerB.call('createRoom', { id: 'shared-room', name: 'Shared', createdBy: 'VLD0:alice' });
+
+  // Both have the room
+  const roomA = await peerA.call('getRoom', { roomId: 'shared-room' });
+  const roomB = await peerB.call('getRoom', { roomId: 'shared-room' });
+  a.equal(roomA.name, 'Shared');
+  a.equal(roomB.name, 'Shared');
+});
+
+t.test('crdt: peers post different messages', async (a) => {
+  // Alice posts on Peer A
+  await peerA.call('postMessage', {
+    id: 'msg-alice-1', roomId: 'shared-room', topic: 'general',
+    senderKey: 'VLD0:alice', content: 'Hello from Alice'
+  });
+  await peerA.call('postMessage', {
+    id: 'msg-alice-2', roomId: 'shared-room', topic: 'general',
+    senderKey: 'VLD0:alice', content: 'Another from Alice'
+  });
+
+  // Bob posts on Peer B
+  await peerB.call('postMessage', {
+    id: 'msg-bob-1', roomId: 'shared-room', topic: 'general',
+    senderKey: 'VLD0:bob', content: 'Hello from Bob'
+  });
+  await peerB.call('postMessage', {
+    id: 'msg-bob-2', roomId: 'shared-room', topic: 'random',
+    senderKey: 'VLD0:bob', content: 'Bob in random topic'
+  });
+
+  // Verify isolation before merge
+  const msgsA = await peerA.call('getMessages', { roomId: 'shared-room', topic: 'general' });
+  const msgsB = await peerB.call('getMessages', { roomId: 'shared-room', topic: 'general' });
+  a.equal(msgsA.length, 2, 'Peer A has 2 general messages');
+  a.equal(msgsB.length, 1, 'Peer B has 1 general message');
+});
+
+t.test('crdt: extract changesets from both peers', async (a) => {
+  const changesA = await peerA.call('getChanges', { sinceVersion: 0 });
+  const changesB = await peerB.call('getChanges', { sinceVersion: 0 });
+  a.ok(changesA.length > 0, 'Peer A has changesets');
+  a.ok(changesB.length > 0, 'Peer B has changesets');
+});
+
+t.test('crdt: apply B changesets to A — messages merge', async (a) => {
+  const changesB = await peerB.call('getChanges', { sinceVersion: 0 });
+  await peerA.call('applyChanges', { changes: changesB });
+
+  // Peer A should now have all messages
+  const generalA = await peerA.call('getMessages', { roomId: 'shared-room', topic: 'general' });
+  a.equal(generalA.length, 3, 'Peer A has 3 general messages after merge');
+
+  const randomA = await peerA.call('getMessages', { roomId: 'shared-room', topic: 'random' });
+  a.equal(randomA.length, 1, 'Peer A has Bob\'s random topic message');
+
+  // Verify message content
+  const ids = generalA.map(m => m.id).sort();
+  a.deepEqual(ids, ['msg-alice-1', 'msg-alice-2', 'msg-bob-1'], 'all 3 message IDs present');
+});
+
+t.test('crdt: apply A changesets to B — bidirectional merge', async (a) => {
+  const changesA = await peerA.call('getChanges', { sinceVersion: 0 });
+  await peerB.call('applyChanges', { changes: changesA });
+
+  // Peer B should now have all messages too
+  const generalB = await peerB.call('getMessages', { roomId: 'shared-room', topic: 'general' });
+  a.equal(generalB.length, 3, 'Peer B has 3 general messages after merge');
+
+  const randomB = await peerB.call('getMessages', { roomId: 'shared-room', topic: 'random' });
+  a.equal(randomB.length, 1, 'Peer B has random topic message');
+});
+
+t.test('crdt: both peers converge to same state', async (a) => {
+  const topicsA = await peerA.call('getTopics', { roomId: 'shared-room' });
+  const topicsB = await peerB.call('getTopics', { roomId: 'shared-room' });
+
+  a.equal(topicsA.length, topicsB.length, 'same number of topics');
+  for (const tA of topicsA) {
+    const tB = topicsB.find(tb => tb.topic === tA.topic);
+    a.ok(tB, `topic "${tA.topic}" exists on both peers`);
+    a.equal(tA.message_count, tB.message_count, `"${tA.topic}" message count matches`);
+  }
+});
+
+t.test('crdt: re-applying same changesets is idempotent', async (a) => {
+  const changesB = await peerB.call('getChanges', { sinceVersion: 0 });
+  await peerA.call('applyChanges', { changes: changesB });
+
+  const generalA = await peerA.call('getMessages', { roomId: 'shared-room', topic: 'general' });
+  a.equal(generalA.length, 3, 'still 3 messages after re-apply');
+});
+
+t.test('crdt: incremental sync (only new changes)', async (a) => {
+  const versionA = await peerA.call('getDbVersion');
+
+  // Peer A posts a new message
+  await peerA.call('postMessage', {
+    id: 'msg-alice-3', roomId: 'shared-room', topic: 'general',
+    senderKey: 'VLD0:alice', content: 'Incremental sync test'
+  });
+
+  // Get only changes since the saved version
+  const newChanges = await peerA.call('getChanges', { sinceVersion: versionA });
+  a.ok(newChanges.length > 0, 'new changes exist');
+
+  // Apply only new changes to B
+  await peerB.call('applyChanges', { changes: newChanges });
+  const generalB = await peerB.call('getMessages', { roomId: 'shared-room', topic: 'general' });
+  a.equal(generalB.length, 4, 'Peer B has 4 general messages after incremental sync');
+});
+
+// ============================================================
+// Cross-peer export/import (different peers, different messages)
+// ============================================================
+
+const peerC = createWorker(`export-c-${RUN_ID}`);
+const peerD = createWorker(`export-d-${RUN_ID}`);
+
+t.test('cross-peer: two peers export independently, third imports both', async (a) => {
+  await peerC.init();
+  await peerD.init();
+
+  // Peer C creates room and posts
+  await peerC.call('createRoom', { id: 'xroom', name: 'CrossPeer', createdBy: 'VLD0:carol' });
+  await peerC.call('postMessage', {
+    id: 'xmsg-1', roomId: 'xroom', topic: 'chat', senderKey: 'VLD0:carol', content: 'From Carol'
+  });
+
+  // Peer D creates same room and posts different message
+  await peerD.call('createRoom', { id: 'xroom', name: 'CrossPeer', createdBy: 'VLD0:dave' });
+  await peerD.call('postMessage', {
+    id: 'xmsg-2', roomId: 'xroom', topic: 'chat', senderKey: 'VLD0:dave', content: 'From Dave'
+  });
+
+  // Export from both
+  const exportC = await peerC.call('exportRoom', { roomId: 'xroom' });
+  const exportD = await peerD.call('exportRoom', { roomId: 'xroom' });
+
+  a.equal(exportC.messages.length, 1, 'Carol export has 1 message');
+  a.equal(exportD.messages.length, 1, 'Dave export has 1 message');
+
+  // Third peer imports both exports
+  const peerE = createWorker(`export-e-${RUN_ID}`);
+  await peerE.init();
+
+  await peerE.call('importRoom', { data: exportC });
+  await peerE.call('importRoom', { data: exportD });
+
+  // Peer E should have both messages
+  const msgs = await peerE.call('getMessages', { roomId: 'xroom', topic: 'chat' });
+  a.equal(msgs.length, 2, 'Peer E has both messages');
+  const ids = msgs.map(m => m.id).sort();
+  a.deepEqual(ids, ['xmsg-1', 'xmsg-2'], 'both message IDs present');
+
+  peerE.worker.terminate();
+});
+
+// ============================================================
+// Error paths
+// ============================================================
+
+t.test('error: action before init throws', async (a) => {
+  const fresh = createWorker(`error-${RUN_ID}`);
+  try {
+    await fresh.call('getRooms');
+    a.ok(false, 'should have thrown');
+  } catch (e) {
+    a.ok(e.message.length > 0, 'error message provided');
+  }
+  fresh.worker.terminate();
+});
+
+t.test('error: unknown action throws', async (a) => {
+  try {
+    await peerA.call('nonexistentAction');
+    a.ok(false, 'should have thrown');
+  } catch (e) {
+    a.ok(e.message.includes('Unknown action'), 'says unknown action');
+  }
+});
+
+t.test('error: postMessage to nonexistent room succeeds (no FK constraint)', async (a) => {
+  // cr-sqlite CRR tables don't enforce REFERENCES — this should not throw
+  const msg = await peerA.call('postMessage', {
+    id: 'orphan-msg', roomId: 'no-such-room', topic: 'test',
+    senderKey: 'VLD0:alice', content: 'orphan'
+  });
+  a.equal(msg.room_id, 'no-such-room', 'message created in nonexistent room');
+});
+
+// ============================================================
+// Schema edge cases
+// ============================================================
+
+t.test('edge: empty string topic name', async (a) => {
+  await peerA.call('postMessage', {
+    id: 'edge-empty-topic', roomId: 'shared-room', topic: '',
+    senderKey: 'VLD0:alice', content: 'empty topic'
+  });
+  const topics = await peerA.call('getTopics', { roomId: 'shared-room' });
+  const empty = topics.find(t => t.topic === '');
+  a.ok(empty, 'empty string topic exists');
+  a.equal(empty.message_count, 1);
+});
+
+t.test('edge: special characters in topic name', async (a) => {
+  const specialTopic = '🔥 émojis & <html> "quotes"';
+  await peerA.call('postMessage', {
+    id: 'edge-special', roomId: 'shared-room', topic: specialTopic,
+    senderKey: 'VLD0:alice', content: 'special chars test'
+  });
+  const topics = await peerA.call('getTopics', { roomId: 'shared-room' });
+  const special = topics.find(t => t.topic === specialTopic);
+  a.ok(special, 'special character topic exists');
+});
+
+t.test('edge: very long message content', async (a) => {
+  const longContent = 'x'.repeat(10000);
+  const msg = await peerA.call('postMessage', {
+    id: 'edge-long', roomId: 'shared-room', topic: 'general',
+    senderKey: 'VLD0:alice', content: longContent
+  });
+  a.equal(msg.content.length, 10000, '10K chars stored');
+
+  const fetched = await peerA.call('getMessages', { roomId: 'shared-room', topic: 'general' });
+  const found = fetched.find(m => m.id === 'edge-long');
+  a.equal(found.content.length, 10000, '10K chars retrieved');
+});
+
+t.test('edge: search with special regex characters', async (a) => {
+  await peerA.call('postMessage', {
+    id: 'edge-regex', roomId: 'shared-room', topic: 'general',
+    senderKey: 'VLD0:alice', content: 'price is $100 (50% off)'
+  });
+  const results = await peerA.call('searchMessages', { roomId: 'shared-room', query: '$100' });
+  a.ok(results.length >= 1, 'found message with $ in query');
+
+  const results2 = await peerA.call('searchMessages', { roomId: 'shared-room', query: '50%' });
+  a.ok(results2.length >= 1, 'found message with % in query');
+});
+
+// ============================================================
+// Cleanup
+// ============================================================
+
+// Terminate workers
+t.test('cleanup: terminate workers', async (a) => {
+  peerA.worker.terminate();
+  peerB.worker.terminate();
+  peerC.worker.terminate();
+  peerD.worker.terminate();
+  a.ok(true, 'all workers terminated');
+});
+
+await t.end();
+</script>
+</body>
+</html>

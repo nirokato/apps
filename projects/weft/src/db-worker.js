@@ -66,9 +66,10 @@ const CRR_TABLES = ['rooms', 'members', 'messages'];
 
 // --- Initialization ---
 
-async function init() {
+async function init(params) {
+  const dbName = (params && params.dbName) || 'weft';
   const sqlite = await initWasm();
-  db = await sqlite.open('weft');
+  db = await sqlite.open(dbName);
 
   // Create tables — execute each statement individually to avoid splitting issues
   for (const stmt of SCHEMA_TABLES.split(/;\s*\n/).filter(s => s.trim())) {
@@ -86,8 +87,8 @@ async function init() {
 // --- Action handlers ---
 
 const actions = {
-  async init() {
-    return init();
+  async init(params) {
+    return init(params);
   },
 
   async getIdentity() {
