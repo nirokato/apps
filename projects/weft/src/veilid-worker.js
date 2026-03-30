@@ -44,6 +44,14 @@ function decodeBytes(hex) {
   return bytes;
 }
 
+function parseRecordKey(key) {
+  return typeof key === 'string' ? RecordKey.parse(key) : key;
+}
+
+function parseKeyPair(kp) {
+  return typeof kp === 'string' ? KeyPair.parse(kp) : kp;
+}
+
 // --- Initialization ---
 
 async function initVeilid({ bootstrapUrl }) {
@@ -109,77 +117,190 @@ function setIdentity({ publicKey, secretKey }) {
 
 async function createPrivateRoute() {
   const routeBlob = await veilidClient.newPrivateRoute();
-  // routeBlob has { route_id, blob }
   return {
     routeId: routeBlob.route_id,
-    blob: routeBlob.blob, // Uint8Array that can be shared for others to reach us
+    blob: routeBlob.blob,
   };
 }
 
 async function importRoute({ blob }) {
   const routeId = veilidClient.importRemotePrivateRoute(new Uint8Array(blob));
-  return { routeId: routeId.encode() };
+  return { routeId: routeId.toString() };
 }
 
 async function releaseRoute({ routeId }) {
-  // TODO: need to convert string routeId back to RouteId object
-  // For now, this is a placeholder
   return { ok: true };
 }
 
 // --- DHT Records ---
 
-async function createDHTRecord({ schema }) {
-  // schema: { kind: 'DFLT', o_cnt: N } or { kind: 'SMPL', o_cnt: N, members: [...] }
-  // For MVP, use DFLT schema (single writer)
+async function createDHTRecord({ schema, owner }) {
   const kind = veilidCrypto.CRYPTO_KIND_VLD0;
-  const desc = await routingCtx.createDHTRecord(kind, schema || { kind: 'DFLT', o_cnt: 1 });
+  const ownerKp = owner ? parseKeyPair(owner) : undefined;
+  const desc = await routingCtx.createDHTRecord(kind, schema || { kind: 'DFLT', o_cnt: 1 }, ownerKp);
   return {
-    key: desc.key,
-    owner: desc.owner,
+    key: desc.key.toString(),
+    owner: desc.owner.toString(),
     schema: desc.schema,
   };
 }
 
 async function openDHTRecord({ key, writer }) {
-  const recordKey = RecordKey.fromEncodedString(key);
-  const kp = writer ? KeyPair.fromEncodedString(writer) : null;
+  const recordKey = parseRecordKey(key);
+  const kp = writer ? parseKeyPair(writer) : null;
   const desc = await routingCtx.openDHTRecord(recordKey, kp);
   return {
-    key: desc.key,
-    owner: desc.owner,
+    key: desc.key.toString(),
+    owner: desc.owner.toString(),
     schema: desc.schema,
   };
 }
 
 async function closeDHTRecord({ key }) {
-  const recordKey = RecordKey.fromEncodedString(key);
+  const recordKey = parseRecordKey(key);
   await routingCtx.closeDHTRecord(recordKey);
   return { ok: true };
 }
 
 async function getDHTValue({ key, subkey, forceRefresh }) {
-  const recordKey = RecordKey.fromEncodedString(key);
+  const recordKey = parseRecordKey(key);
   const value = await routingCtx.getDHTValue(recordKey, subkey, forceRefresh || false);
   if (!value) return null;
-  // value is ValueData { data: Uint8Array, seq: number, writer: PublicKey }
   return {
-    data: value.data,
+    data: Array.from(value.data),
     seq: value.seq,
-    writer: value.writer,
+    writer: value.writer.toString(),
   };
 }
 
 async function setDHTValue({ key, subkey, data }) {
-  const recordKey = RecordKey.fromEncodedString(key);
+  const recordKey = parseRecordKey(key);
   const dataBytes = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
   const result = await routingCtx.setDHTValue(recordKey, subkey, dataBytes);
-  return result ? { data: result.data, seq: result.seq } : null;
+  return result ? { data: Array.from(result.data), seq: result.seq } : null;
 }
 
 async function watchDHTValues({ key, subkeys, expiration, count }) {
-  const recordKey = RecordKey.fromEncodedString(key);
+  const recordKey = parseRecordKey(key);
   const active = await routingCtx.watchDhtValues(recordKey, subkeys || null, expiration || null, count || null);
+  return { active };
+}
+
+// --- Room DHT Operations ---
+
+// Creates a DHT record for a room with SMPL schema.
+// Owner gets subkey 0 (metadata). Each member gets 1 subkey (presence).
+// Returns: { dhtKey, ownerKey, ownerSecret, encryptionKey }
+async function createRoomDHT({ roomName }) {
+  if (!identity) throw new Error('Identity not set');
+
+  // Generate owner keypair for this room's DHT record
+  const ownerKp = crypto.generateKeyPair();
+  const ownerPublicKey = ownerKp.key;
+  const ownerSecretKey = ownerKp.secret;
+
+  // Generate room encryption key (ChaCha20-Poly1305 symmetric key)
+  const encryptionKey = crypto.randomSharedSecret();
+
+  // Create SMPL schema: owner gets 1 subkey (metadata), plus 1 member subkey for creator
+  const kind = veilidCrypto.CRYPTO_KIND_VLD0;
+  const schema = {
+    kind: 'SMPL',
+    o_cnt: 1,  // subkey 0: room metadata (owner-writable)
+    members: [
+      { m_key: ownerPublicKey.toString(), m_cnt: 1 },  // subkey 1: creator's presence
+    ],
+  };
+
+  const desc = await routingCtx.createDHTRecord(kind, schema, ownerKp);
+  const dhtKey = desc.key.toString();
+
+  // Write room metadata to subkey 0
+  const metadata = JSON.stringify({
+    v: 1,
+    name: roomName,
+    created_at: new Date().toISOString(),
+    created_by: identity.publicKey,
+    member_keys: [identity.publicKey],
+  });
+  await routingCtx.setDHTValue(desc.key, 0, new TextEncoder().encode(metadata));
+
+  // Write creator's initial presence to subkey 1
+  const presence = JSON.stringify({
+    v: 1,
+    display_name: '',
+    public_key: identity.publicKey,
+    status: 'online',
+    last_seen: new Date().toISOString(),
+    db_version: 0,
+  });
+  await routingCtx.setDHTValue(desc.key, 1, new TextEncoder().encode(presence));
+
+  return {
+    dhtKey,
+    ownerKey: ownerPublicKey.toString(),
+    ownerSecret: ownerSecretKey.toString(),
+    encryptionKey: encryptionKey.toString(),
+  };
+}
+
+// Opens an existing room's DHT record and reads metadata
+async function openRoomDHT({ dhtKey, ownerKeyPair }) {
+  const recordKey = parseRecordKey(dhtKey);
+  const kp = ownerKeyPair ? parseKeyPair(ownerKeyPair) : null;
+  const desc = await routingCtx.openDHTRecord(recordKey, kp);
+
+  // Read room metadata from subkey 0
+  const metaValue = await routingCtx.getDHTValue(desc.key, 0, true);
+  let metadata = null;
+  if (metaValue && metaValue.data) {
+    try {
+      metadata = JSON.parse(new TextDecoder().decode(metaValue.data));
+    } catch (e) {
+      // metadata may be encrypted or corrupt
+    }
+  }
+
+  return {
+    key: desc.key.toString(),
+    owner: desc.owner.toString(),
+    schema: desc.schema,
+    metadata,
+  };
+}
+
+// Updates room metadata (owner only)
+async function updateRoomMetadata({ dhtKey, metadata }) {
+  const recordKey = parseRecordKey(dhtKey);
+  const data = new TextEncoder().encode(JSON.stringify(metadata));
+  const result = await routingCtx.setDHTValue(recordKey, 0, data);
+  return result ? { stale: true, data: Array.from(result.data) } : { ok: true };
+}
+
+// Writes presence to a member's subkey
+async function writePresence({ dhtKey, subkey, presence }) {
+  const recordKey = parseRecordKey(dhtKey);
+  const data = new TextEncoder().encode(JSON.stringify(presence));
+  const result = await routingCtx.setDHTValue(recordKey, subkey, data);
+  return result ? { stale: true } : { ok: true };
+}
+
+// Reads a member's presence from their subkey
+async function readPresence({ dhtKey, subkey }) {
+  const recordKey = parseRecordKey(dhtKey);
+  const value = await routingCtx.getDHTValue(recordKey, subkey, true);
+  if (!value || !value.data) return null;
+  try {
+    return JSON.parse(new TextDecoder().decode(value.data));
+  } catch (e) {
+    return null;
+  }
+}
+
+// Sets up a watch on a room's DHT record for changes
+async function watchRoom({ dhtKey }) {
+  const recordKey = parseRecordKey(dhtKey);
+  const active = await routingCtx.watchDhtValues(recordKey, null, null, null);
   return { active };
 }
 
@@ -213,25 +334,25 @@ async function replyAppCall({ callId, message }) {
 
 function encryptMessage({ data, sharedSecret }) {
   const nonce = crypto.randomNonce();
-  const secret = SharedSecret.fromEncodedString(sharedSecret);
+  const secret = SharedSecret.parse(sharedSecret);
   const plaintext = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
   const ciphertext = crypto.encryptAead(plaintext, nonce, secret, null);
   return {
     ciphertext: Array.from(ciphertext),
-    nonce: nonce.encode(),
+    nonce: nonce.toString(),
   };
 }
 
 function decryptMessage({ ciphertext, nonce, sharedSecret }) {
-  const nonceObj = Nonce.fromEncodedString(nonce);
-  const secret = SharedSecret.fromEncodedString(sharedSecret);
+  const nonceObj = Nonce.parse(nonce);
+  const secret = SharedSecret.parse(sharedSecret);
   const plaintext = crypto.decryptAead(new Uint8Array(ciphertext), nonceObj, secret, null);
   return { data: Array.from(plaintext) };
 }
 
 function generateSharedSecret() {
   const secret = crypto.randomSharedSecret();
-  return { sharedSecret: secret.encode() };
+  return { sharedSecret: secret.toString() };
 }
 
 // --- State ---
@@ -266,12 +387,22 @@ const actions = {
   getDHTValue,
   setDHTValue,
   watchDHTValues,
+  // Room-level DHT operations
+  createRoomDHT,
+  openRoomDHT,
+  updateRoomMetadata,
+  writePresence,
+  readPresence,
+  watchRoom,
+  // Messaging
   sendAppMessage,
   sendAppCall,
   replyAppCall,
+  // Encryption
   encryptMessage,
   decryptMessage,
   generateSharedSecret,
+  // State
   getState,
   shutdown,
 };

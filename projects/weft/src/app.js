@@ -35,9 +35,9 @@ class DB {
     return this.call('createIdentity', { publicKey, displayName });
   }
   getRooms() { return this.call('getRooms'); }
-  createRoom(name, createdBy) {
+  createRoom(name, createdBy, dhtKey, ownerKey, ownerSecret, encryptionKey) {
     const id = ulid();
-    return this.call('createRoom', { id, name, createdBy });
+    return this.call('createRoom', { id, name, createdBy, dhtKey, ownerKey, ownerSecret, encryptionKey });
   }
   getRoom(roomId) { return this.call('getRoom', { roomId }); }
   getTopics(roomId) { return this.call('getTopics', { roomId }); }
@@ -117,6 +117,25 @@ class Veilid {
   }
   watchDHTValues(key, subkeys, expiration, count) {
     return this.call('watchDHTValues', { key, subkeys, expiration, count });
+  }
+  // Room-level DHT operations
+  createRoomDHT(roomName) {
+    return this.call('createRoomDHT', { roomName });
+  }
+  openRoomDHT(dhtKey, ownerKeyPair) {
+    return this.call('openRoomDHT', { dhtKey, ownerKeyPair });
+  }
+  updateRoomMetadata(dhtKey, metadata) {
+    return this.call('updateRoomMetadata', { dhtKey, metadata });
+  }
+  writePresence(dhtKey, subkey, presence) {
+    return this.call('writePresence', { dhtKey, subkey, presence });
+  }
+  readPresence(dhtKey, subkey) {
+    return this.call('readPresence', { dhtKey, subkey });
+  }
+  watchRoom(dhtKey) {
+    return this.call('watchRoom', { dhtKey });
   }
   sendAppMessage(target, message) {
     return this.call('sendAppMessage', { target, message });
@@ -232,7 +251,22 @@ async function handleValueChange(update) {
 const handlers = {
   async createRoom(name) {
     try {
-      const room = await db.createRoom(name, state.identity.public_key);
+      // Create DHT record if Veilid is connected
+      let dhtKey = '', ownerKey = '', ownerSecret = '', encryptionKey = '';
+      if (veilid && state.veilidState === 'connected') {
+        try {
+          const dht = await veilid.createRoomDHT(name);
+          dhtKey = dht.dhtKey;
+          ownerKey = dht.ownerKey;
+          ownerSecret = dht.ownerSecret;
+          encryptionKey = dht.encryptionKey;
+          console.log('[Veilid] DHT record created for room:', dhtKey);
+        } catch (e) {
+          console.warn('Failed to create DHT record, room will be local-only:', e);
+        }
+      }
+
+      const room = await db.createRoom(name, state.identity.public_key, dhtKey, ownerKey, ownerSecret, encryptionKey);
       await db.updateMemberName(room.id, state.identity.public_key, state.identity.display_name);
       const rooms = await db.getRooms();
       await handlers.enterRoom(room.id);

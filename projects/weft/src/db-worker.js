@@ -21,7 +21,11 @@ CREATE TABLE IF NOT EXISTS rooms (
     id TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL DEFAULT '',
     created_by TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    dht_key TEXT NOT NULL DEFAULT '',
+    owner_key TEXT NOT NULL DEFAULT '',
+    owner_secret TEXT NOT NULL DEFAULT '',
+    encryption_key TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS members (
@@ -104,8 +108,11 @@ const actions = {
     return db.execO('SELECT * FROM rooms ORDER BY created_at DESC');
   },
 
-  async createRoom({ id, name, createdBy }) {
-    await db.exec('INSERT INTO rooms (id, name, created_by) VALUES (?, ?, ?)', [id, name, createdBy]);
+  async createRoom({ id, name, createdBy, dhtKey, ownerKey, ownerSecret, encryptionKey }) {
+    await db.exec(
+      'INSERT INTO rooms (id, name, created_by, dht_key, owner_key, owner_secret, encryption_key) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [id, name, createdBy, dhtKey || '', ownerKey || '', ownerSecret || '', encryptionKey || '']
+    );
     await db.exec(
       'INSERT INTO members (room_id, public_key, display_name, role) VALUES (?, ?, ?, ?)',
       [id, createdBy, '', 'owner']
@@ -210,7 +217,8 @@ const actions = {
         id: room.id,
         name: room.name,
         created_by: room.created_by,
-        created_at: room.created_at
+        created_at: room.created_at,
+        dht_key: room.dht_key || null,
       },
       members: members.map(m => ({
         public_key: m.public_key,
@@ -235,8 +243,8 @@ const actions = {
     const { room, members, messages } = data;
 
     await db.exec(
-      'INSERT OR IGNORE INTO rooms (id, name, created_by, created_at) VALUES (?, ?, ?, ?)',
-      [room.id, room.name, room.created_by, room.created_at]
+      'INSERT OR IGNORE INTO rooms (id, name, created_by, created_at, dht_key, encryption_key) VALUES (?, ?, ?, ?, ?, ?)',
+      [room.id, room.name, room.created_by, room.created_at, room.dht_key || '', data.encryption_key || '']
     );
 
     for (const m of members) {
