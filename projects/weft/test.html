@@ -235,17 +235,19 @@
         // Get default config and modify
         const config = veilidClient.defaultConfig();
         config.network = config.network || {};
-        config.network.routing_table = config.network.routing_table || {};
-        config.network.routing_table.bootstrap = [BOOTSTRAP_URL];
-        config.network.protocol = config.network.protocol || {};
-        config.network.protocol.udp = { enabled: false, socket_pool_size: 0, listen_address: '', public_address: '' };
-        config.network.protocol.tcp = { connect: false, listen: false, max_connections: 0, listen_address: '', public_address: '' };
-        config.network.protocol.ws = { connect: true, listen: false, max_connections: 16, listen_address: '', path: 'ws', url: '' };
-        config.network.protocol.wss = { connect: true, listen: false, max_connections: 16, listen_address: '', path: 'ws', url: '' };
-        config.table_store = { directory: 'weft-test-ts' };
-        config.protected_store = { directory: 'weft-test-ps' };
-        config.block_store = { directory: 'weft-test-bs' };
-        config.program_name = 'weft-test';
+        config.network.routingTable = config.network.routingTable || {};
+        config.network.routingTable.bootstrap = [BOOTSTRAP_URL];
+        // Override only what we need — let defaultConfig() handle the rest
+        // Disable UDP/TCP (browser can't use raw sockets)
+        config.network.protocol.udp.enabled = false;
+        config.network.protocol.tcp.connect = false;
+        config.network.protocol.tcp.listen = false;
+        // WS: connect only, no listen (WASM can't listen)
+        config.network.protocol.ws.connect = true;
+        config.network.protocol.ws.listen = false;
+        config.network.protocol.wss.connect = true;
+        config.network.protocol.wss.listen = false;
+        config.programName = 'weft-test';
         config.namespace = 'weft-test';
 
         // Attach

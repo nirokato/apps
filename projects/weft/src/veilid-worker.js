@@ -58,25 +58,23 @@ async function initVeilid({ bootstrapUrl }) {
 
   // Override for browser: no listening, WSS connect only
   config.network = config.network || {};
-  config.network.routing_table = config.network.routing_table || {};
-  config.network.routing_table.bootstrap = bootstrapUrl
+  config.network.routingTable = config.network.routingTable || {};
+  config.network.routingTable.bootstrap = bootstrapUrl
     ? [bootstrapUrl]
     : ['wss://bootstrap.veilid.net/ws'];
 
-  config.network.protocol = config.network.protocol || {};
-  config.network.protocol.udp = { enabled: false, socket_pool_size: 0, listen_address: '', public_address: '' };
-  config.network.protocol.tcp = { connect: false, listen: false, max_connections: 0, listen_address: '', public_address: '' };
-  config.network.protocol.ws = { connect: true, listen: false, max_connections: 16, listen_address: '', path: 'ws', url: '' };
-  config.network.protocol.wss = { connect: true, listen: false, max_connections: 16, listen_address: '', path: 'ws', url: '' };
+  // Override only what we need — let defaultConfig() handle the rest
+  // Disable UDP/TCP (browser can't use raw sockets)
+  config.network.protocol.udp.enabled = false;
+  config.network.protocol.tcp.connect = false;
+  config.network.protocol.tcp.listen = false;
+  // WS: connect only, no listen (WASM can't listen)
+  config.network.protocol.ws.connect = true;
+  config.network.protocol.ws.listen = false;
+  config.network.protocol.wss.connect = true;
+  config.network.protocol.wss.listen = false;
 
-  config.table_store = config.table_store || {};
-  config.table_store.directory = 'weft-ts';
-  config.protected_store = config.protected_store || {};
-  config.protected_store.directory = 'weft-ps';
-  config.block_store = config.block_store || {};
-  config.block_store.directory = 'weft-bs';
-
-  config.program_name = 'weft';
+  config.programName = 'weft';
   config.namespace = 'weft';
 
   // 4. Start core with update callback
