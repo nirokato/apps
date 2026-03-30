@@ -49,30 +49,20 @@ async function initVeilid({ bootstrapUrl }) {
   await veilidClient.initializeCore({
     logging: {
       api: { enabled: true, level: 'Info' },
-      performance: { enabled: false, level: 'Info', logs_in_timings: false, logs_in_console: false },
+      performance: { enabled: false, level: 'Info', logsInTimings: false, logsInConsole: false },
     },
   });
 
   // 3. Get default config and customize for browser WASM
   const config = veilidClient.defaultConfig();
 
-  // Override for browser: no listening, WSS connect only
-  config.network = config.network || {};
-  config.network.routingTable = config.network.routingTable || {};
+  // Set bootstrap to our node
   config.network.routingTable.bootstrap = bootstrapUrl
     ? [bootstrapUrl]
-    : ['wss://bootstrap.veilid.net/ws'];
-
-  // Override only what we need — let defaultConfig() handle the rest
-  // Disable UDP/TCP (browser can't use raw sockets)
-  config.network.protocol.udp.enabled = false;
-  config.network.protocol.tcp.connect = false;
-  config.network.protocol.tcp.listen = false;
+    : ['ws://bootstrap-v1.veilid.net:5150/ws'];
   // WS: connect only, no listen (WASM can't listen)
   config.network.protocol.ws.connect = true;
   config.network.protocol.ws.listen = false;
-  config.network.protocol.wss.connect = true;
-  config.network.protocol.wss.listen = false;
 
   config.programName = 'weft';
   config.namespace = 'weft';

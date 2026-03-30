@@ -223,7 +223,7 @@
           veilidClient.initializeCore({
             logging: {
               api: { enabled: true, level: 'Info' },
-              performance: { enabled: false, level: 'Info', logs_in_timings: false, logs_in_console: false },
+              performance: { enabled: false, level: 'Info', logsInTimings: false, logsInConsole: false },
             },
           }),
           TIMEOUT_MS,
@@ -234,18 +234,12 @@
 
         // Get default config and inspect its structure
         const config = veilidClient.defaultConfig();
-        log('Default config: ' + JSON.stringify(config, null, 2));
 
-        // Override only what we need — let defaultConfig() handle the rest
-        // Disable UDP/TCP (browser can't use raw sockets)
-        config.network.protocol.udp.enabled = false;
-        config.network.protocol.tcp.connect = false;
-        config.network.protocol.tcp.listen = false;
+        // Set bootstrap to our node
+        config.network.routingTable.bootstrap = [BOOTSTRAP_URL];
         // WS: connect only, no listen (WASM can't listen)
         config.network.protocol.ws.connect = true;
         config.network.protocol.ws.listen = false;
-        config.network.protocol.wss.connect = true;
-        config.network.protocol.wss.listen = false;
         config.programName = 'weft-test';
         config.namespace = 'weft-test';
 
