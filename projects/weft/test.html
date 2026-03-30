@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>weft — bootstrap node test</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0f0f0c;
+      color: #e8e4d4;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+    .container { max-width: 700px; margin: 0 auto; }
+    h1 { color: #c4a24e; margin-bottom: 0.5rem; }
+    .subtitle { color: #9a9686; font-size: 0.9rem; margin-bottom: 2rem; }
+    .test-group { margin-bottom: 1.5rem; }
+    .test-group h2 { font-size: 1rem; margin-bottom: 0.75rem; }
+    .test {
+      display: flex; align-items: flex-start; gap: 0.75rem;
+      padding: 0.75rem 1rem; margin-bottom: 0.25rem;
+      background: #1a1a16; border: 1px solid #2a2a24; border-radius: 6px;
+      font-size: 0.85rem; font-family: 'JetBrains Mono', monospace;
+    }
+    .test .icon { font-size: 1.1rem; flex-shrink: 0; width: 1.5rem; text-align: center; }
+    .test .label { flex: 1; }
+    .test .detail { color: #9a9686; font-size: 0.75rem; margin-top: 0.25rem; word-break: break-all; }
+    .pending .icon { color: #9a9686; }
+    .running .icon { color: #c4a24e; }
+    .pass .icon { color: #4ec44e; }
+    .fail .icon { color: #c44e4e; }
+    .skip .icon { color: #9a9686; }
+    .fail { border-color: #c44e4e; }
+    .pass { border-color: #2a2a24; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      font-family: 'Inter', sans-serif; font-size: 0.85rem; font-weight: 600;
+      padding: 0.5rem 1.25rem; border-radius: 6px; border: none;
+      background: #c4a24e; color: #0f0f0c; cursor: pointer;
+      margin-bottom: 1.5rem;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .log {
+      background: #1a1a16; border: 1px solid #2a2a24; border-radius: 6px;
+      padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+      color: #9a9686; max-height: 300px; overflow-y: auto; white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .log .info { color: #e8e4d4; }
+    .log .warn { color: #c4a24e; }
+    .log .err { color: #c44e4e; }
+    .log .ok { color: #4ec44e; }
+    .back { margin-top: 2rem; font-size: 0.85rem; }
+    .back a { color: #9a9686; text-decoration: none; }
+    .back a:hover { color: #c4a24e; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>weft bootstrap test</h1>
+    <p class="subtitle">Validates WebSocket connectivity, Veilid WASM, and network attachment</p>
+
+    <button class="btn" id="run-btn" onclick="runTests()">Run tests</button>
+
+    <div id="results"></div>
+
+    <h2 style="margin: 1.5rem 0 0.5rem; font-size: 0.9rem;">Event log</h2>
+    <div class="log" id="log"></div>
+
+    <p class="back"><a href="./">&larr; back to weft</a></p>
+  </div>
+
+  <script type="module">
+    const BOOTSTRAP_URL = 'wss://veilid.andymolenda.com/ws';
+    const WASM_JS = './wasm/veilid/veilid_wasm.js';
+    const TIMEOUT_MS = 30000;
+
+    const tests = [
+      { id: 'ws', group: 'Connectivity', name: 'WebSocket to bootstrap node', detail: BOOTSTRAP_URL },
+      { id: 'wasm-load', group: 'Veilid WASM', name: 'Load veilid_wasm.js + .wasm binary' },
+      { id: 'wasm-init', group: 'Veilid WASM', name: 'Initialize Veilid core' },
+      { id: 'wasm-attach', group: 'Veilid WASM', name: 'Attach to network' },
+      { id: 'wasm-state', group: 'Veilid WASM', name: 'Reach AttachedGood or better' },
+      { id: 'crypto', group: 'Crypto', name: 'Generate keypair' },
+      { id: 'route', group: 'Routing', name: 'Create private route' },
+    ];
+
+    let logEl, resultsEl, runBtn;
+    let veilidModule = null;
+
+    function init() {
+      logEl = document.getElementById('log');
+      resultsEl = document.getElementById('results');
+      runBtn = document.getElementById('run-btn');
+      renderTests();
+    }
+
+    function renderTests() {
+      const groups = {};
+      for (const t of tests) {
+        if (!groups[t.group]) groups[t.group] = [];
+        groups[t.group].push(t);
+      }
+      let html = '';
+      for (const [group, items] of Object.entries(groups)) {
+        html += `<div class="test-group"><h2>${group}</h2>`;
+        for (const t of items) {
+          const s = t.status || 'pending';
+          const icon = s === 'pass' ? '&#10003;' : s === 'fail' ? '&#10007;' : s === 'running' ? '&#9696;' : s === 'skip' ? '&#8211;' : '&#9675;';
+          html += `<div class="test ${s}" id="test-${t.id}">
+            <span class="icon">${icon}</span>
+            <div>
+              <div class="label">${t.name}</div>
+              ${t.detail ? `<div class="detail">${t.detail}</div>` : ''}
+            </div>
+          </div>`;
+        }
+        html += '</div>';
+      }
+      resultsEl.innerHTML = html;
+    }
+
+    function setStatus(id, status, detail) {
+      const t = tests.find(t => t.id === id);
+      if (t) {
+        t.status = status;
+        if (detail) t.detail = detail;
+      }
+      renderTests();
+    }
+
+    function log(msg, level = 'info') {
+      const line = document.createElement('div');
+      line.className = level;
+      line.textContent = `[${new Date().toISOString().slice(11, 23)}] ${msg}`;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function withTimeout(promise, ms, label) {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+        ),
+      ]);
+    }
+
+    // --- Test 1: WebSocket connectivity ---
+    async function testWebSocket() {
+      setStatus('ws', 'running');
+      log(`Connecting to ${BOOTSTRAP_URL}...`);
+      return new Promise((resolve) => {
+        const ws = new WebSocket(BOOTSTRAP_URL);
+        const timer = setTimeout(() => {
+          ws.close();
+          setStatus('ws', 'fail', `Timed out after ${TIMEOUT_MS}ms`);
+          log('WebSocket connection timed out', 'err');
+          resolve(false);
+        }, TIMEOUT_MS);
+
+        ws.onopen = () => {
+          clearTimeout(timer);
+          setStatus('ws', 'pass', `Connected to ${BOOTSTRAP_URL}`);
+          log('WebSocket connected', 'ok');
+          ws.close();
+          resolve(true);
+        };
+        ws.onerror = (e) => {
+          clearTimeout(timer);
+          setStatus('ws', 'fail', 'Connection failed — check tunnel and veilid-server');
+          log(`WebSocket error: ${e.type || 'unknown'}`, 'err');
+          resolve(false);
+        };
+        ws.onclose = (e) => {
+          if (!e.wasClean && !timer._called) {
+            // Close without open = failed
+          }
+        };
+      });
+    }
+
+    // --- Test 2-5: Veilid WASM ---
+    async function testVeilidWasm() {
+      // Load
+      setStatus('wasm-load', 'running');
+      log('Loading veilid-wasm module...');
+      try {
+        veilidModule = await withTimeout(
+          import(WASM_JS),
+          TIMEOUT_MS,
+          'WASM module load'
+        );
+        await withTimeout(
+          veilidModule.default(),
+          TIMEOUT_MS,
+          'WASM binary init'
+        );
+        setStatus('wasm-load', 'pass', `Loaded successfully`);
+        log('WASM module loaded', 'ok');
+      } catch (e) {
+        setStatus('wasm-load', 'fail', e.message);
+        log(`WASM load failed: ${e.message}`, 'err');
+        setStatus('wasm-init', 'skip', 'Skipped — WASM load failed');
+        setStatus('wasm-attach', 'skip', 'Skipped');
+        setStatus('wasm-state', 'skip', 'Skipped');
+        setStatus('crypto', 'skip', 'Skipped');
+        setStatus('route', 'skip', 'Skipped');
+        return false;
+      }
+
+      // Initialize core
+      setStatus('wasm-init', 'running');
+      log('Initializing Veilid core...');
+      try {
+        const { veilidClient } = veilidModule;
+
+        await withTimeout(
+          veilidClient.initializeCore({
+            logging: {
+              api: { enabled: true, level: 'info' },
+              performance: { enabled: false, level: 'info', logs_in_timings: false, logs_in_console: false },
+            },
+          }),
+          TIMEOUT_MS,
+          'Core initialization'
+        );
+        setStatus('wasm-init', 'pass');
+        log('Veilid core initialized', 'ok');
+
+        // Get default config and modify
+        const config = veilidClient.defaultConfig();
+        config.network = config.network || {};
+        config.network.routing_table = config.network.routing_table || {};
+        config.network.routing_table.bootstrap = [BOOTSTRAP_URL];
+        config.network.protocol = config.network.protocol || {};
+        config.network.protocol.udp = { enabled: false, socket_pool_size: 0, listen_address: '', public_address: '' };
+        config.network.protocol.tcp = { connect: false, listen: false, max_connections: 0, listen_address: '', public_address: '' };
+        config.network.protocol.ws = { connect: true, listen: false, max_connections: 16, listen_address: '', path: 'ws', url: '' };
+        config.network.protocol.wss = { connect: true, listen: false, max_connections: 16, listen_address: '', path: 'ws', url: '' };
+        config.table_store = { directory: 'weft-test-ts' };
+        config.protected_store = { directory: 'weft-test-ps' };
+        config.block_store = { directory: 'weft-test-bs' };
+        config.program_name = 'weft-test';
+        config.namespace = 'weft-test';
+
+        // Attach
+        setStatus('wasm-attach', 'running');
+        log('Starting Veilid core and attaching to network...');
+
+        let attachResolve;
+        const attachPromise = new Promise(r => { attachResolve = r; });
+        let bestState = 'none';
+
+        await veilidClient.startupCore((update) => {
+          if (update && update.kind === 'Attachment') {
+            const s = update.state;
+            log(`Attachment state: ${s}`);
+            bestState = s;
+            if (s === 'AttachedGood' || s === 'AttachedStrong' || s === 'FullyAttached' || s === 'OverAttached') {
+              attachResolve(true);
+            } else if (s === 'AttachedWeak') {
+              // Keep waiting for better, but mark as partial success
+              setStatus('wasm-attach', 'pass', `State: ${s}`);
+            }
+          }
+          if (update && update.kind === 'Log') {
+            // Skip verbose log updates
+          }
+          if (update && update.kind === 'Network') {
+            log(`Network: started=${update.started} bps_down=${update.bps_down} bps_up=${update.bps_up} peers=${JSON.stringify(update.peers)}`);
+          }
+        }, config);
+
+        await veilidClient.attach();
+        setStatus('wasm-attach', 'pass', 'Attached to network');
+        log('Attach called', 'ok');
+
+        // Wait for good attachment (with timeout)
+        setStatus('wasm-state', 'running');
+        log('Waiting for AttachedGood or better...');
+        try {
+          await withTimeout(attachPromise, TIMEOUT_MS, 'Network attachment');
+          setStatus('wasm-state', 'pass', `Reached: ${bestState}`);
+          log(`Reached attachment state: ${bestState}`, 'ok');
+        } catch (e) {
+          setStatus('wasm-state', 'fail', `Best state: ${bestState}. ${e.message}`);
+          log(`Attachment wait failed: ${e.message}. Best: ${bestState}`, 'warn');
+        }
+
+        // Crypto test
+        setStatus('crypto', 'running');
+        log('Testing crypto: generating keypair...');
+        try {
+          const { veilidCrypto } = veilidModule;
+          const crypto = veilidClient.getCrypto(veilidCrypto.CRYPTO_KIND_VLD0);
+          const kp = crypto.generateKeyPair();
+          const pub = kp.key().encode();
+          setStatus('crypto', 'pass', `Public key: ${pub}`);
+          log(`Keypair generated. Public: ${pub}`, 'ok');
+        } catch (e) {
+          setStatus('crypto', 'fail', e.message);
+          log(`Crypto failed: ${e.message}`, 'err');
+        }
+
+        // Route test
+        setStatus('route', 'running');
+        log('Testing routing: creating private route...');
+        try {
+          const routeBlob = await withTimeout(
+            veilidClient.newPrivateRoute(),
+            TIMEOUT_MS,
+            'Private route creation'
+          );
+          setStatus('route', 'pass', `Route created`);
+          log('Private route created successfully', 'ok');
+          // Clean up
+          veilidClient.releasePrivateRoute(routeBlob.route_id);
+        } catch (e) {
+          setStatus('route', 'fail', e.message);
+          log(`Route creation failed: ${e.message}`, 'err');
+        }
+
+        // Cleanup
+        log('Shutting down Veilid...');
+        try {
+          await veilidClient.detach();
+          await veilidClient.shutdownCore();
+          log('Veilid shut down cleanly', 'ok');
+        } catch (e) {
+          log(`Shutdown warning: ${e.message}`, 'warn');
+        }
+
+        return true;
+      } catch (e) {
+        setStatus('wasm-init', 'fail', e.message);
+        log(`Veilid init failed: ${e.message}`, 'err');
+        setStatus('wasm-attach', 'skip', 'Skipped');
+        setStatus('wasm-state', 'skip', 'Skipped');
+        setStatus('crypto', 'skip', 'Skipped');
+        setStatus('route', 'skip', 'Skipped');
+        return false;
+      }
+    }
+
+    // --- Run all tests ---
+    window.runTests = async function() {
+      runBtn.disabled = true;
+      runBtn.textContent = 'Running...';
+      logEl.innerHTML = '';
+
+      // Reset all test statuses
+      for (const t of tests) { t.status = 'pending'; t.detail = undefined; }
+      // Restore ws detail
+      tests[0].detail = BOOTSTRAP_URL;
+      renderTests();
+
+      log('Starting test suite...', 'info');
+
+      // Test 1: WebSocket
+      const wsOk = await testWebSocket();
+
+      if (!wsOk) {
+        log('WebSocket failed — skipping Veilid tests. Check that veilid-server is running and the Cloudflare Tunnel is active.', 'err');
+        for (const t of tests) {
+          if (t.id !== 'ws' && !t.status) setStatus(t.id, 'skip', 'Skipped — WebSocket failed');
+        }
+      } else {
+        // Test 2-7: Veilid WASM
+        await testVeilidWasm();
+      }
+
+      const passed = tests.filter(t => t.status === 'pass').length;
+      const failed = tests.filter(t => t.status === 'fail').length;
+      const skipped = tests.filter(t => t.status === 'skip').length;
+      log(`Done: ${passed} passed, ${failed} failed, ${skipped} skipped`, passed === tests.length ? 'ok' : failed > 0 ? 'err' : 'warn');
+
+      runBtn.disabled = false;
+      runBtn.textContent = 'Run tests again';
+    };
+
+    init();
+  </script>
+</body>
+</html>
