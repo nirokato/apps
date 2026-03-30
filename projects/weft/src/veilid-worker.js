@@ -86,8 +86,8 @@ async function initVeilid({ bootstrapUrl }) {
 
 async function generateKeyPair() {
   const kp = crypto.generateKeyPair();
-  const pub = kp.key().encode();
-  const sec = kp.secret().encode();
+  const pub = kp.key.toString();
+  const sec = kp.secret.toString();
   identity = { publicKey: pub, secretKey: sec };
   return identity;
 }

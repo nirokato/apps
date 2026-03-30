@@ -294,7 +294,7 @@
           const { veilidCrypto } = veilidModule;
           const crypto = veilidClient.getCrypto(veilidCrypto.CRYPTO_KIND_VLD0);
           const kp = crypto.generateKeyPair();
-          const pub = kp.key().encode();
+          const pub = kp.key.toString();
           setStatus('crypto', 'pass', `Public key: ${pub}`);
           log(`Keypair generated. Public: ${pub}`, 'ok');
         } catch (e) {
@@ -360,14 +360,11 @@
       const wsOk = await testWebSocket();
 
       if (!wsOk) {
-        log('WebSocket failed — skipping Veilid tests. Check that veilid-server is running and the Cloudflare Tunnel is active.', 'err');
-        for (const t of tests) {
-          if (t.id !== 'ws' && !t.status) setStatus(t.id, 'skip', 'Skipped — WebSocket failed');
-        }
-      } else {
-        // Test 2-7: Veilid WASM
-        await testVeilidWasm();
+        log('WebSocket failed — Veilid WASM tests will still run but network attachment may fail.', 'warn');
       }
+
+      // Test 2-7: Veilid WASM (run regardless of WebSocket — WASM init and crypto work offline)
+      await testVeilidWasm();
 
       const passed = tests.filter(t => t.status === 'pass').length;
       const failed = tests.filter(t => t.status === 'fail').length;
