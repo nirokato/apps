@@ -74,7 +74,7 @@ Weft takes Zulip's stream→topic→message threading model — the best data mo
 | Component | Technology | Source | Size (gzip) | Notes |
 |---|---|---|---|---|
 | P2P networking | Veilid WASM (`veilid-wasm`) | Pre-built from GitLab CI or compiled via `wasm-pack` | ~5-8MB est. | Provides identity, DHT, routing, encryption, AppMessage/AppCall |
-| Local database | cr-sqlite (`@vlcn.io/crsqlite-wasm`) | npm / CDN | ~800KB | SQLite + CRDT extension for conflict-free merge |
+| Local database | cr-sqlite (`@vlcn.io/crsqlite-wasm` v0.16.0) | Vendored in `lib/` | ~1.7MB WASM + ~200KB JS | SQLite + CRDT extension for conflict-free merge. Requires `wa-sqlite`, `xplat-api`, `async-mutex` (all vendored with bare specifiers rewritten to relative paths) |
 | UI rendering | lit-html | CDN (`https://cdn.jsdelivr.net/npm/lit-html@3/+esm`) | ~7KB | Tagged template literals, no build step, reactive rendering |
 | ID generation | ulid | CDN or inline (~30 lines) | <1KB | Time-sortable, globally unique, no coordination |
 | Serialization | CBOR or JSON | Native or CDN (`cbor-x`) | <5KB | For message encoding over AppMessage |
@@ -110,33 +110,35 @@ All tables are created as normal SQLite tables, then promoted to CRRs (Conflict-
 -- ============================================================
 -- SCHEMA INITIALIZATION
 -- Run once on first boot. cr-sqlite extension must be loaded first.
+--
+-- IMPORTANT: cr-sqlite requires all NOT NULL columns on CRR tables
+-- to have DEFAULT values (for forwards/backwards merge compatibility).
 -- ============================================================
 
 -- Identity: this peer's Veilid keypair reference
 -- NOT a CRR — local-only, never synced
 CREATE TABLE IF NOT EXISTS local_identity (
     id INTEGER PRIMARY KEY CHECK (id = 1),  -- singleton
-    veilid_public_key TEXT NOT NULL,
+    public_key TEXT NOT NULL,               -- starts as LOCAL:xxx, upgraded to VLD0:xxx
     display_name TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 -- Rooms: a shared conversation space
 CREATE TABLE IF NOT EXISTS rooms (
-    id TEXT PRIMARY KEY,                    -- derived from DHT record key
-    dht_key TEXT NOT NULL,                  -- Veilid DHT record key (for network ops)
-    name TEXT NOT NULL,
-    created_by TEXT NOT NULL,               -- veilid public key of creator
+    id TEXT PRIMARY KEY NOT NULL,           -- ULID locally, or derived from DHT record key
+    name TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL DEFAULT '',    -- veilid public key of creator
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 SELECT crsql_as_crr('rooms');
 
 -- Members: peers in a room
 CREATE TABLE IF NOT EXISTS members (
-    room_id TEXT NOT NULL REFERENCES rooms(id),
-    public_key TEXT NOT NULL,               -- veilid public key
-    display_name TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'member',     -- 'owner' | 'member'
+    room_id TEXT NOT NULL DEFAULT '',
+    public_key TEXT NOT NULL DEFAULT '',    -- veilid public key
+    display_name TEXT NOT NULL DEFAULT '',
+    role TEXT NOT NULL DEFAULT 'member',    -- 'owner' | 'member'
     joined_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (room_id, public_key)
 );
@@ -144,14 +146,14 @@ SELECT crsql_as_crr('members');
 
 -- Messages: the core content
 CREATE TABLE IF NOT EXISTS messages (
-    id TEXT PRIMARY KEY,                    -- ULID (time-sortable, globally unique)
-    room_id TEXT NOT NULL REFERENCES rooms(id),
-    topic TEXT NOT NULL,                    -- free-text topic string (the Zulip magic)
-    sender_key TEXT NOT NULL,               -- veilid public key of sender
-    content TEXT NOT NULL,                  -- message body (plain text for MVP)
+    id TEXT PRIMARY KEY NOT NULL,           -- ULID (time-sortable, globally unique)
+    room_id TEXT NOT NULL DEFAULT '',
+    topic TEXT NOT NULL DEFAULT '',         -- free-text topic string (the Zulip magic)
+    sender_key TEXT NOT NULL DEFAULT '',    -- veilid public key of sender
+    content TEXT NOT NULL DEFAULT '',       -- message body (plain text for MVP)
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     edited_at TEXT,                         -- NULL for MVP, future: last edit timestamp
-    deleted INTEGER NOT NULL DEFAULT 0      -- soft delete flag (0=active, 1=deleted)
+    deleted INTEGER NOT NULL DEFAULT 0     -- soft delete flag (0=active, 1=deleted)
 );
 SELECT crsql_as_crr('messages');
 
@@ -178,6 +180,8 @@ CREATE TABLE IF NOT EXISTS read_cursors (
 - **`edited_at` and `deleted` columns exist from day one** even though MVP doesn't expose edit/delete in the UI. When cr-sqlite merges changesets from a future version that supports edits, the data model is ready.
 - **`local_identity` and `read_cursors` are NOT CRRs.** They are device-local state. Syncing read state across devices is a future feature.
 - **No `signature` column.** Veilid's transport layer already handles message signing and verification. We don't need to redundantly store signatures in the database. If we later want to verify message provenance from an export file (where Veilid transport wasn't involved), we can add this.
+- **`dht_key` column on rooms is deferred.** The PRD originally included `dht_key TEXT NOT NULL` on the rooms table. This will be added when DHT record creation is implemented (Phase 3, item 18). For now rooms use ULID IDs and are local-only.
+- **cr-sqlite requires DEFAULT on all NOT NULL columns.** This is a CRDT merge compatibility requirement — when a remote peer sends a changeset that creates a row, columns not present in the changeset need a fallback value.
 
 ### 4.3 Useful queries the schema supports
 
@@ -388,7 +392,6 @@ This is acceptable for a chat app. No custom conflict resolution logic needed.
 
   "room": {
     "id": "room-xyz",
-    "dht_key": "VLD0:...",
     "name": "CDA ML Club",
     "created_by": "VLD0:abc123...",
     "created_at": "2026-03-01T..."
@@ -544,7 +547,7 @@ Typography:
 
 ### 8.5 First-run experience
 
-1. Page loads → PGlite boots (fast) → empty state with loading indicator for Veilid
+1. Page loads → cr-sqlite boots (fast) → empty state with loading indicator for Veilid
 2. Veilid connects → identity generated → main UI appears
 3. Two options presented: **"Create a room"** or **"Import a room"**
 4. Create: enter room name → room created → share invite (export file or copy invite text)
@@ -558,37 +561,48 @@ Typography:
 
 ```
 projects/weft/
-├── index.html              # Entry point, loads everything
+├── index.html              # Entry point, all CSS, loads src/app.js
+├── test.html               # Bootstrap connectivity test suite
+├── run-tests.js            # Headless Playwright test runner
+├── docs/
+│   └── PRD.md              # This document
 ├── src/
-│   ├── app.js              # Main thread orchestrator
-│   ├── ui.js               # lit-html rendering functions
-│   ├── db-worker.js        # cr-sqlite Web Worker
-│   ├── veilid-worker.js    # Veilid WASM Web Worker
-│   ├── sync.js             # Sync protocol logic
-│   ├── export.js           # Import/export logic
-│   ├── schema.sql          # cr-sqlite schema (inlined or fetched)
-│   ├── ulid.js             # ULID generator (~30 lines)
-│   └── constants.js        # Config, bootstrap URLs, version
+│   ├── app.js              # Main thread orchestrator (state, worker coordination)
+│   ├── ui.js               # lit-html rendering (loading → setup → chat → settings)
+│   ├── db-worker.js        # cr-sqlite Web Worker (module worker)
+│   ├── veilid-worker.js    # Veilid WASM Web Worker (module worker)
+│   ├── export.js           # Room JSON export/import
+│   ├── ulid.js             # ULID generator (~50 lines, Crockford base32)
+│   └── constants.js        # Config: version, DB names, limits
 ├── wasm/
-│   └── veilid/             # Pre-built veilid-wasm artifacts
-│       ├── veilid_wasm_bg.wasm
-│       └── veilid_wasm.js  # wasm-bindgen glue
-├── lib/
-│   ├── crsqlite.wasm       # cr-sqlite WASM binary
-│   └── wa-sqlite.js        # wa-sqlite JS bindings
-└── assets/
-    └── (favicon, etc.)
+│   └── veilid/             # Pre-built veilid-wasm v0.5.3 artifacts
+│       ├── veilid_wasm_bg.wasm  # ~9.5 MB
+│       └── veilid_wasm.js       # wasm-bindgen glue (~310 KB)
+└── lib/                    # Vendored cr-sqlite dependencies (bare specifiers rewritten)
+    ├── crsqlite/            # @vlcn.io/crsqlite-wasm v0.16.0
+    │   ├── index.js         # Entry point (initWasm + SQLite3 class)
+    │   ├── DB.js, TX.js, Stmt.js, serialize.js, cache.js, log.js
+    │   ├── crsqlite.mjs     # Emscripten glue (~79 KB)
+    │   └── crsqlite.wasm    # SQLite + cr-sqlite WASM binary (~1.7 MB)
+    ├── wa-sqlite/           # @vlcn.io/wa-sqlite v0.22.0
+    │   └── src/
+    │       ├── sqlite-api.js, sqlite-constants.js, VFS.js
+    │       └── examples/IDBBatchAtomicVFS.js, WebLocks.js, IDBContext.js
+    ├── xplat-api/           # @vlcn.io/xplat-api v0.15.0
+    │   └── xplat-api.js
+    └── async-mutex/         # async-mutex v0.4.1
+        └── index.mjs
 ```
 
 ### 9.2 Dependency sourcing
 
-| Dependency | Source strategy |
-|---|---|
-| lit-html | CDN import (`jsdelivr` or `esm.sh`) |
-| cr-sqlite WASM | Vendored in `lib/` from `@vlcn.io/crsqlite-wasm` release |
-| veilid-wasm | Vendored in `wasm/veilid/` from GitLab CI artifacts |
-| ULID | Inline implementation in `src/ulid.js` |
-| CBOR (if used) | CDN import or inline minimal encoder |
+| Dependency | Source strategy | Status |
+|---|---|---|
+| lit-html | CDN import (`jsdelivr`) | Done |
+| cr-sqlite WASM | Vendored in `lib/crsqlite/` + `lib/wa-sqlite/` + `lib/xplat-api/` + `lib/async-mutex/` | Done (v0.16.0) |
+| veilid-wasm | Vendored in `wasm/veilid/` from GitLab CI artifacts | Done (v0.5.3) |
+| ULID | Inline implementation in `src/ulid.js` | Done |
+| CBOR or JSON | TBD — JSON for initial implementation, CBOR if size matters | Not started |
 
 ### 9.3 Build and deploy
 
@@ -608,25 +622,13 @@ projects/weft/
 4. Copies output to `projects/weft/wasm/veilid/`
 5. Commits the artifacts (or uploads as a release asset)
 
-### 9.4 CLAUDE.md updates required
+### 9.4 CLAUDE.md updates — DONE
 
-When adding Weft to the apps repo, update `CLAUDE.md`:
-
-1. Add to projects table:
-   ```
-   | weft | `projects/weft/` | `weft.apps.andymolenda.com` | Local-first topic-threaded P2P chat on Veilid + cr-sqlite |
-   ```
-
-2. Add a note under "Tech stack & conventions":
-   ```
-   **Exception: Weft** uses vendored WASM binaries (Veilid, cr-sqlite) in `wasm/` and `lib/`.
-   These are pre-built artifacts, not compiled in the deploy workflow.
-   The application JS remains unbundled native ES modules consistent with repo conventions.
-   ```
-
-3. Update homepage `index.html` with the new project link.
-
-4. Add `weft` to the `projects` set in `tofu/variables.tf`.
+All `CLAUDE.md` updates have been applied:
+- ✅ Projects table entry added
+- ✅ Tech stack exception for vendored WASM noted
+- ✅ Homepage `index.html` links to weft
+- ✅ `weft` added to `tofu/variables.tf` projects set
 
 ---
 
@@ -634,24 +636,24 @@ When adding Weft to the apps repo, update `CLAUDE.md`:
 
 ### 10.1 MVP includes
 
-- [ ] Veilid WASM boots in browser, generates/loads identity
-- [ ] cr-sqlite boots in browser, creates schema, persists to IndexedDB
+- [x] Veilid WASM boots in browser, generates/loads identity
+- [x] cr-sqlite boots in browser, creates schema, persists to IndexedDB
 - [ ] Create a room (generates DHT record + symmetric key)
 - [ ] Join a room (from invite: DHT key + encryption key)
-- [ ] Post messages with a topic string
-- [ ] View messages grouped by topic (topic-river layout)
-- [ ] Topics sorted by most recent activity
-- [ ] Expand/collapse topics
-- [ ] Unread count badges per topic
+- [x] Post messages with a topic string
+- [x] View messages grouped by topic (topic-river layout)
+- [x] Topics sorted by most recent activity
+- [x] Expand/collapse topics
+- [x] Unread count badges per topic
 - [ ] Real-time message delivery via AppMessage
 - [ ] Sync on connect via AppCall + cr-sqlite changesets
-- [ ] Export room to JSON file
-- [ ] Import room from JSON file
+- [x] Export room to JSON file
+- [x] Import room from JSON file
 - [ ] Offline reading and composing (queued send)
-- [ ] Connection status indicator
-- [ ] First-run experience (create or import)
-- [ ] Responsive single-column layout
-- [ ] Design system compliance (colors, typography, back link)
+- [x] Connection status indicator
+- [x] First-run experience (create or import)
+- [x] Responsive single-column layout
+- [x] Design system compliance (colors, typography, back link)
 
 ### 10.2 MVP explicitly excludes
 
@@ -720,51 +722,51 @@ The app is fully functional offline. Export/import provides sync between peers w
 
 Recommended order of implementation for Claude Code Web:
 
-### Phase 1: Foundation
-1. Scaffold `projects/weft/` in the apps repo
-2. Create `index.html` with design system styles and loading states
-3. Set up cr-sqlite Web Worker with schema initialization
-4. Implement basic ULID generator
-5. Build UI for creating a room (local only, no network)
-6. Build topic-river UI rendering with lit-html
-7. Implement message posting (local cr-sqlite insert + UI update)
-8. Implement topic expansion/collapse
-9. Test: single-user local-only chat works end-to-end
+### Phase 1: Foundation — COMPLETE ✅
+1. ~~Scaffold `projects/weft/` in the apps repo~~
+2. ~~Create `index.html` with design system styles and loading states~~
+3. ~~Set up cr-sqlite Web Worker with schema initialization~~
+4. ~~Implement basic ULID generator~~
+5. ~~Build UI for creating a room (local only, no network)~~
+6. ~~Build topic-river UI rendering with lit-html~~
+7. ~~Implement message posting (local cr-sqlite insert + UI update)~~
+8. ~~Implement topic expansion/collapse~~
+9. ~~Test: single-user local-only chat works end-to-end~~
 
-### Phase 2: Persistence & portability
-10. Add IndexedDB persistence for cr-sqlite
-11. Implement export (cr-sqlite → JSON)
-12. Implement import (JSON → cr-sqlite with dedup)
-13. Test: close tab, reopen, data persists
-14. Test: export from one browser, import in another, data matches
+### Phase 2: Persistence & portability — COMPLETE ✅
+10. ~~Add IndexedDB persistence for cr-sqlite~~
+11. ~~Implement export (cr-sqlite → JSON)~~
+12. ~~Implement import (JSON → cr-sqlite with dedup)~~
+13. ~~Test: close tab, reopen, data persists~~
+14. ~~Test: export from one browser, import in another, data matches~~
 
-### Phase 3: Veilid integration
-15. Vendor veilid-wasm artifacts
-16. Set up Veilid Web Worker with startup config
-17. Implement identity generation/persistence
-18. Implement DHT record creation for rooms
+### Phase 3: Veilid integration — IN PROGRESS
+15. ~~Vendor veilid-wasm artifacts~~
+16. ~~Set up Veilid Web Worker with startup config~~
+17. ~~Implement identity generation/persistence~~
+18. Implement DHT record creation for rooms ← **NEXT**
 19. Implement DHT record opening for room joins
 20. Implement AppMessage send/receive for real-time messages
 21. Implement presence updates in DHT subkeys
 22. Test: two browser tabs can exchange messages in real-time
 
-### Phase 4: Sync
-23. Implement cr-sqlite changeset extraction (`crsql_changes`)
+### Phase 4: Sync — NOT STARTED
+23. ~~Implement cr-sqlite changeset extraction (`crsql_changes`)~~ (primitives exist in db-worker: `getChanges`/`applyChanges`)
 24. Implement AppCall-based sync request/response protocol
 25. Implement sync-on-connect (read peer db_versions from DHT, sync if behind)
 26. Implement periodic sync check
 27. Test: offline peer comes online, catches up automatically
 
-### Phase 5: Polish
-28. Connection status indicator
-29. Unread count badges
-30. First-run experience (create or import)
-31. Room settings panel (members, invite copy, export/import)
-32. Search (basic LIKE)
+### Phase 5: Polish — PARTIALLY COMPLETE
+28. ~~Connection status indicator~~
+29. ~~Unread count badges~~
+30. ~~First-run experience (create or import)~~
+31. Room settings panel (members, invite copy, export/import) — basic version exists
+32. ~~Search (basic LIKE)~~
 33. Responsive layout testing
 34. Error handling and edge cases
-35. Update CLAUDE.md, homepage, tofu/variables.tf
-36. Deploy to weft.apps.andymolenda.com
+35. ~~Update CLAUDE.md, homepage, tofu/variables.tf~~
+36. ~~Deploy to weft.apps.andymolenda.com~~
 
 ### Phase verification
 
