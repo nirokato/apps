@@ -87,8 +87,9 @@ When adding a project to the homepage, follow this exact pattern:
 - **External libraries via CDN only** (e.g. Google Fonts, PeerJS). No npm, no bundlers, no node_modules.
 - **Single-file preferred.** Keep everything in one `index.html` unless complexity demands splitting.
 - **Infrastructure as Code:** OpenTofu (v1.8+) with Cloudflare provider (~> 4.0).
-- **No test framework or linter** is currently configured.
+- **No test framework or linter** is currently configured for most projects.
 - **Exception: Weft** uses vendored WASM binaries (Veilid, cr-sqlite) in `wasm/` and `lib/`. These are pre-built artifacts, not compiled in the deploy workflow. The application JS remains unbundled native ES modules consistent with repo conventions.
+- **Exception: Weft testing** uses Playwright (headless Chromium) to test Web Worker logic in a real browser context. Run with `node projects/weft/tests/run.js`. Tests exercise the DB worker (cr-sqlite) and app logic without network access; Veilid DHT tests require a live network and are manual-only. See `projects/weft/tests/README.md` for details.
 
 ## Deployment
 

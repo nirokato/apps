@@ -778,9 +778,34 @@ If a phase hits a dead end (e.g., Veilid WASM won't load), the previous phase's 
 
 ## 13. Testing strategy
 
-### 13.1 Manual testing (MVP)
+### 13.1 Automated tests — `node tests/run.js`
 
-No automated test framework is configured in the apps repo. Testing is manual:
+Weft uses Playwright (headless Chromium) to test Web Worker logic in a real browser context. This is necessary because cr-sqlite, IndexedDB, and Web Workers only exist in browsers.
+
+**Test architecture:**
+- `tests/run.js` — Playwright runner: starts a static file server, loads test HTML pages, collects console output, reports pass/fail with exit code
+- `tests/*.test.html` — Test pages that exercise workers via postMessage, log results to console
+- Tests run against the real cr-sqlite WASM and real IndexedDB — no mocks
+
+**What's tested automatically (no network needed):**
+- DB worker: schema init, room CRUD (with DHT fields), message posting, topic queries, unread counts, export/import, search, changeset extraction/application, CRR merge
+- App logic: identity creation, room creation flow, data round-trips
+
+**What requires live network (manual via `test.html`):**
+- Veilid WASM bootstrap, network attachment, keypair generation
+- DHT record creation, reading, watching
+- AppMessage/AppCall between peers
+- Private route creation
+
+**TDD workflow:**
+1. Write a failing test in `tests/*.test.html`
+2. Implement the feature
+3. Run `node tests/run.js` — all tests must pass
+4. Commit
+
+### 13.2 Manual testing
+
+These scenarios require a real browser with network access:
 
 - **Single-user flow:** Create room, post messages across topics, expand/collapse, search, export, close tab, reopen, verify persistence, import in fresh browser
 - **Two-peer flow:** Two browser tabs (or two devices), create room in tab A, import/join in tab B, send messages in both, verify both see all messages
@@ -788,7 +813,7 @@ No automated test framework is configured in the apps repo. Testing is manual:
 - **Import idempotency:** Import same file twice, verify no duplicates
 - **Cross-export merge:** Export from peer A and peer B separately, import both into peer C, verify clean union
 
-### 13.2 What to watch for
+### 13.3 What to watch for
 
 - cr-sqlite `crsql_changes` row size vs. Veilid 32KB AppCall limit
 - Memory usage with both WASM modules loaded
