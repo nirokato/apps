@@ -18,7 +18,7 @@ console.log('  typeof self:', typeof self);
 console.log('  self.constructor.name:', self.constructor?.name);
 console.log('  typeof indexedDB:', typeof indexedDB);
 console.log('  typeof localStorage:', typeof localStorage);
-console.log('  typeof crypto:', typeof crypto);
+console.log('  typeof crypto:', typeof globalThis.crypto);
 console.log('  typeof fetch:', typeof fetch);
 console.log('  window === self:', window === self);
 console.log('  self instanceof Window:', self instanceof Window);
@@ -48,7 +48,7 @@ import init, {
 } from '../wasm/veilid/veilid_wasm.js';
 
 let routingCtx = null;
-let crypto = null;
+let vldCrypto = null;
 let identity = null; // { publicKey, secretKey, keyPair }
 const importedRoutes = new Map(); // routeId string → RouteId WASM object
 
@@ -138,7 +138,7 @@ async function initVeilid() {
   routingCtx = VeilidRoutingContext.create();
 
   // 7. Get crypto instance
-  crypto = veilidClient.getCrypto(veilidCrypto.CRYPTO_KIND_VLD0);
+  vldCrypto = veilidClient.getCrypto(veilidCrypto.CRYPTO_KIND_VLD0);
 
   return { ok: true };
 }
@@ -146,7 +146,7 @@ async function initVeilid() {
 // --- Identity ---
 
 async function generateKeyPair() {
-  const kp = crypto.generateKeyPair();
+  const kp = vldCrypto.generateKeyPair();
   const pub = kp.key.toString();
   const sec = kp.secret.toString();
   identity = { publicKey: pub, secretKey: sec };
@@ -242,12 +242,12 @@ async function createRoomDHT({ roomName }) {
   if (!identity) throw new Error('Identity not set');
 
   // Generate owner keypair for this room's DHT record
-  const ownerKp = crypto.generateKeyPair();
+  const ownerKp = vldCrypto.generateKeyPair();
   const ownerPublicKey = ownerKp.key;
   const ownerSecretKey = ownerKp.secret;
 
   // Generate room encryption key (ChaCha20-Poly1305 symmetric key)
-  const encryptionKey = crypto.randomSharedSecret();
+  const encryptionKey = vldCrypto.randomSharedSecret();
 
   // Create SMPL schema: owner gets 1 subkey (metadata), plus 1 member subkey for creator
   const kind = veilidCrypto.CRYPTO_KIND_VLD0;
@@ -383,10 +383,10 @@ async function replyAppCall({ callId, message }) {
 // --- Encryption (for room-level message encryption) ---
 
 function encryptMessage({ data, sharedSecret }) {
-  const nonce = crypto.randomNonce();
+  const nonce = vldCrypto.randomNonce();
   const secret = SharedSecret.parse(sharedSecret);
   const plaintext = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
-  const ciphertext = crypto.encryptAead(plaintext, nonce, secret, null);
+  const ciphertext = vldCrypto.encryptAead(plaintext, nonce, secret, null);
   return {
     ciphertext: Array.from(ciphertext),
     nonce: nonce.toString(),
@@ -396,12 +396,12 @@ function encryptMessage({ data, sharedSecret }) {
 function decryptMessage({ ciphertext, nonce, sharedSecret }) {
   const nonceObj = Nonce.parse(nonce);
   const secret = SharedSecret.parse(sharedSecret);
-  const plaintext = crypto.decryptAead(new Uint8Array(ciphertext), nonceObj, secret, null);
+  const plaintext = vldCrypto.decryptAead(new Uint8Array(ciphertext), nonceObj, secret, null);
   return { data: Array.from(plaintext) };
 }
 
 function generateSharedSecret() {
-  const secret = crypto.randomSharedSecret();
+  const secret = vldCrypto.randomSharedSecret();
   return { sharedSecret: secret.toString() };
 }
 
