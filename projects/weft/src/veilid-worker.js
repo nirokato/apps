@@ -1,9 +1,21 @@
 // Veilid Web Worker — P2P networking, identity, DHT, messaging
 // Module worker: loaded with { type: 'module' }
 
-// Veilid WASM expects `window` to exist — polyfill for Worker context
+// Veilid WASM expects `window` and `localStorage` — polyfill for Worker context
 if (typeof window === 'undefined') {
   self.window = self;
+}
+if (typeof self.localStorage === 'undefined') {
+  // In-memory localStorage shim for Workers (Veilid uses it for table store)
+  const store = new Map();
+  self.localStorage = {
+    getItem: (k) => store.has(k) ? store.get(k) : null,
+    setItem: (k, v) => store.set(k, String(v)),
+    removeItem: (k) => store.delete(k),
+    clear: () => store.clear(),
+    get length() { return store.size; },
+    key: (i) => [...store.keys()][i] || null,
+  };
 }
 
 import init, {
