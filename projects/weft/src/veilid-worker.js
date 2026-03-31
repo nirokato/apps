@@ -87,9 +87,11 @@ async function initVeilid({ bootstrapUrl }) {
   if (bootstrapUrl) {
     config.network.routingTable.bootstrap = [bootstrapUrl];
   }
-  // WS: connect only, no listen (WASM can't listen)
+  // WS/WSS: connect only, no listen (WASM can't listen)
   config.network.protocol.ws.connect = true;
   config.network.protocol.ws.listen = false;
+  config.network.protocol.wss.connect = true;
+  config.network.protocol.wss.listen = false;
 
   config.programName = 'weft';
   config.namespace = 'weft';
