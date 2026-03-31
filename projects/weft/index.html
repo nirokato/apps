@@ -590,6 +590,7 @@
     }
 
     .debug-panel.visible { display: block; }
+    body.debug-open { padding-bottom: 40vh; }
 
     .debug-panel .log-entry {
       padding: 0.15rem 0.25rem;
@@ -668,6 +669,7 @@
         this.visible = !this.visible;
         const panel = document.getElementById('debug-panel');
         if (panel) panel.classList.toggle('visible', this.visible);
+        document.body.classList.toggle('debug-open', this.visible);
         if (this.visible) this.render();
       }
     };
