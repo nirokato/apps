@@ -122,3 +122,4 @@ When making changes to this repo, check off the applicable items:
 - [ ] If you changed the design system (colors, fonts, layout): updated the Design system section above and verified existing projects still match
 - [ ] If you changed the deployment workflow or added new infrastructure: updated the Deployment section above
 - [ ] If you introduced a build step, package manager, test framework, or linter: updated the Tech stack section above
+- [ ] If you made changes to weft: updated `projects/weft/README.md` (current status, architecture, data model), updated `projects/weft/docs/PRD.md` (phase progress, schema, checklist), and ensured tests pass (`node projects/weft/tests/run.js`)
