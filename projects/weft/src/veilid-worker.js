@@ -90,6 +90,9 @@ async function initVeilid({ bootstrapUrl }) {
   // WS/WSS: connect only, no listen (WASM can't listen)
   config.network.protocol.ws.connect = true;
   config.network.protocol.ws.listen = false;
+  if (!config.network.protocol.wss) {
+    config.network.protocol.wss = {};
+  }
   config.network.protocol.wss.connect = true;
   config.network.protocol.wss.listen = false;
 
