@@ -123,7 +123,10 @@ function renderSetup(state, h) {
         <p class="error" @click=${h.clearError}>${state.error}</p>
       ` : ''}
 
-      <p class="back"><a href="https://apps.andymolenda.com">&larr; apps.andymolenda.com</a></p>
+      <p class="back">
+        <a href="https://apps.andymolenda.com">&larr; apps.andymolenda.com</a>
+        <button class="debug-toggle" style="margin-left:1rem;" @click=${() => window.weftDebug?.toggle()}>debug log</button>
+      </p>
     </div>
   `;
 }
@@ -150,6 +153,7 @@ function renderChat(state, h) {
           ${renderConnectionStatus(state)}
           ${state.onlinePeers > 0 ? html`<span class="peer-count" title="${state.onlinePeers} peer(s) online">${state.onlinePeers}p</span>` : ''}
           <button class="btn-icon" @click=${h.showSettings} title="Settings">&#9881;</button>
+          <button class="debug-toggle" @click=${() => window.weftDebug?.toggle()} title="Toggle debug log">log</button>
         </div>
       </header>
 
