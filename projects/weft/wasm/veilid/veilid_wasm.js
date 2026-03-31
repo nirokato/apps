@@ -2672,7 +2672,7 @@ export class EncapsulationKey {
      */
     isEqual(other) {
         _assertClass(other, EncapsulationKey);
-        const ret = wasm.decapsulationkey_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.encapsulationkey_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -2726,7 +2726,7 @@ export class EncapsulationKey {
      * @returns {BareEncapsulationKey}
      */
     get value() {
-        const ret = wasm.decapsulationkey_value(this.__wbg_ptr);
+        const ret = wasm.encapsulationkey_value(this.__wbg_ptr);
         return BareEncapsulationKey.__wrap(ret);
     }
 }
@@ -2782,7 +2782,7 @@ export class EncapsulationKeyGroup {
         wasm.encapsulationkeygroup_addAll(this.__wbg_ptr, ptr0, len0);
     }
     clear() {
-        wasm.decapsulationkeygroup_clear(this.__wbg_ptr);
+        wasm.encapsulationkeygroup_clear(this.__wbg_ptr);
     }
     /**
      * @param {EncapsulationKey} typed_key
@@ -2790,7 +2790,7 @@ export class EncapsulationKeyGroup {
      */
     contains(typed_key) {
         _assertClass(typed_key, EncapsulationKey);
-        const ret = wasm.decapsulationkeygroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
+        const ret = wasm.encapsulationkeygroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -2832,7 +2832,7 @@ export class EncapsulationKeyGroup {
      */
     isEqual(other) {
         _assertClass(other, EncapsulationKeyGroup);
-        const ret = wasm.decapsulationkeygroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.encapsulationkeygroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     constructor() {
@@ -2961,7 +2961,7 @@ export class HashCoordinate {
      */
     isEqual(other) {
         _assertClass(other, HashCoordinate);
-        const ret = wasm.decapsulationkey_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.hashcoordinate_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -3015,7 +3015,7 @@ export class HashCoordinate {
      * @returns {BareHashCoordinate}
      */
     get value() {
-        const ret = wasm.decapsulationkey_value(this.__wbg_ptr);
+        const ret = wasm.hashcoordinate_value(this.__wbg_ptr);
         return BareHashCoordinate.__wrap(ret);
     }
 }
@@ -3066,7 +3066,7 @@ export class HashDigest {
      */
     isEqual(other) {
         _assertClass(other, HashDigest);
-        const ret = wasm.decapsulationkey_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.hashdigest_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -3120,7 +3120,7 @@ export class HashDigest {
      * @returns {BareHashDigest}
      */
     get value() {
-        const ret = wasm.decapsulationkey_value(this.__wbg_ptr);
+        const ret = wasm.hashdigest_value(this.__wbg_ptr);
         return BareHashDigest.__wrap(ret);
     }
 }
@@ -3176,7 +3176,7 @@ export class HashDigestGroup {
         wasm.hashdigestgroup_addAll(this.__wbg_ptr, ptr0, len0);
     }
     clear() {
-        wasm.decapsulationkeygroup_clear(this.__wbg_ptr);
+        wasm.hashdigestgroup_clear(this.__wbg_ptr);
     }
     /**
      * @param {HashDigest} typed_key
@@ -3184,7 +3184,7 @@ export class HashDigestGroup {
      */
     contains(typed_key) {
         _assertClass(typed_key, HashDigest);
-        const ret = wasm.decapsulationkeygroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
+        const ret = wasm.hashdigestgroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -3226,7 +3226,7 @@ export class HashDigestGroup {
      */
     isEqual(other) {
         _assertClass(other, HashDigestGroup);
-        const ret = wasm.decapsulationkeygroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.hashdigestgroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     constructor() {
@@ -3868,7 +3868,7 @@ export class MemberId {
      */
     isEqual(other) {
         _assertClass(other, MemberId);
-        const ret = wasm.decapsulationkey_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.memberid_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -3922,7 +3922,7 @@ export class MemberId {
      * @returns {BareMemberId}
      */
     get value() {
-        const ret = wasm.decapsulationkey_value(this.__wbg_ptr);
+        const ret = wasm.memberid_value(this.__wbg_ptr);
         return BareMemberId.__wrap(ret);
     }
 }
@@ -3978,7 +3978,7 @@ export class MemberIdGroup {
         wasm.memberidgroup_addAll(this.__wbg_ptr, ptr0, len0);
     }
     clear() {
-        wasm.decapsulationkeygroup_clear(this.__wbg_ptr);
+        wasm.memberidgroup_clear(this.__wbg_ptr);
     }
     /**
      * @param {MemberId} typed_key
@@ -3986,7 +3986,7 @@ export class MemberIdGroup {
      */
     contains(typed_key) {
         _assertClass(typed_key, MemberId);
-        const ret = wasm.decapsulationkeygroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
+        const ret = wasm.memberidgroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -4028,7 +4028,7 @@ export class MemberIdGroup {
      */
     isEqual(other) {
         _assertClass(other, MemberIdGroup);
-        const ret = wasm.decapsulationkeygroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.memberidgroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     constructor() {
@@ -4163,7 +4163,7 @@ export class NodeId {
      */
     isEqual(other) {
         _assertClass(other, NodeId);
-        const ret = wasm.decapsulationkey_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.nodeid_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -4217,7 +4217,7 @@ export class NodeId {
      * @returns {BareNodeId}
      */
     get value() {
-        const ret = wasm.decapsulationkey_value(this.__wbg_ptr);
+        const ret = wasm.nodeid_value(this.__wbg_ptr);
         return BareNodeId.__wrap(ret);
     }
 }
@@ -4273,7 +4273,7 @@ export class NodeIdGroup {
         wasm.nodeidgroup_addAll(this.__wbg_ptr, ptr0, len0);
     }
     clear() {
-        wasm.decapsulationkeygroup_clear(this.__wbg_ptr);
+        wasm.nodeidgroup_clear(this.__wbg_ptr);
     }
     /**
      * @param {NodeId} typed_key
@@ -4281,7 +4281,7 @@ export class NodeIdGroup {
      */
     contains(typed_key) {
         _assertClass(typed_key, NodeId);
-        const ret = wasm.decapsulationkeygroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
+        const ret = wasm.nodeidgroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -4323,7 +4323,7 @@ export class NodeIdGroup {
      */
     isEqual(other) {
         _assertClass(other, NodeIdGroup);
-        const ret = wasm.decapsulationkeygroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.nodeidgroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     constructor() {
@@ -4636,7 +4636,7 @@ export class OpaqueRecordKey {
      */
     isEqual(other) {
         _assertClass(other, OpaqueRecordKey);
-        const ret = wasm.decapsulationkey_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.opaquerecordkey_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -4690,7 +4690,7 @@ export class OpaqueRecordKey {
      * @returns {BareOpaqueRecordKey}
      */
     get value() {
-        const ret = wasm.decapsulationkey_value(this.__wbg_ptr);
+        const ret = wasm.opaquerecordkey_value(this.__wbg_ptr);
         return BareOpaqueRecordKey.__wrap(ret);
     }
 }
@@ -4746,7 +4746,7 @@ export class OpaqueRecordKeyGroup {
         wasm.opaquerecordkeygroup_addAll(this.__wbg_ptr, ptr0, len0);
     }
     clear() {
-        wasm.decapsulationkeygroup_clear(this.__wbg_ptr);
+        wasm.opaquerecordkeygroup_clear(this.__wbg_ptr);
     }
     /**
      * @param {OpaqueRecordKey} typed_key
@@ -4754,7 +4754,7 @@ export class OpaqueRecordKeyGroup {
      */
     contains(typed_key) {
         _assertClass(typed_key, OpaqueRecordKey);
-        const ret = wasm.decapsulationkeygroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
+        const ret = wasm.opaquerecordkeygroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -4796,7 +4796,7 @@ export class OpaqueRecordKeyGroup {
      */
     isEqual(other) {
         _assertClass(other, OpaqueRecordKeyGroup);
-        const ret = wasm.decapsulationkeygroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.opaquerecordkeygroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     constructor() {
@@ -4931,7 +4931,7 @@ export class PublicKey {
      */
     isEqual(other) {
         _assertClass(other, PublicKey);
-        const ret = wasm.decapsulationkey_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.publickey_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -4985,7 +4985,7 @@ export class PublicKey {
      * @returns {BarePublicKey}
      */
     get value() {
-        const ret = wasm.decapsulationkey_value(this.__wbg_ptr);
+        const ret = wasm.publickey_value(this.__wbg_ptr);
         return BarePublicKey.__wrap(ret);
     }
 }
@@ -5041,7 +5041,7 @@ export class PublicKeyGroup {
         wasm.publickeygroup_addAll(this.__wbg_ptr, ptr0, len0);
     }
     clear() {
-        wasm.decapsulationkeygroup_clear(this.__wbg_ptr);
+        wasm.publickeygroup_clear(this.__wbg_ptr);
     }
     /**
      * @param {PublicKey} typed_key
@@ -5049,7 +5049,7 @@ export class PublicKeyGroup {
      */
     contains(typed_key) {
         _assertClass(typed_key, PublicKey);
-        const ret = wasm.decapsulationkeygroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
+        const ret = wasm.publickeygroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -5091,7 +5091,7 @@ export class PublicKeyGroup {
      */
     isEqual(other) {
         _assertClass(other, PublicKeyGroup);
-        const ret = wasm.decapsulationkeygroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.publickeygroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     constructor() {
@@ -5528,7 +5528,7 @@ export class RouteId {
      */
     isEqual(other) {
         _assertClass(other, RouteId);
-        const ret = wasm.decapsulationkey_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.routeid_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -5582,7 +5582,7 @@ export class RouteId {
      * @returns {BareRouteId}
      */
     get value() {
-        const ret = wasm.decapsulationkey_value(this.__wbg_ptr);
+        const ret = wasm.routeid_value(this.__wbg_ptr);
         return BareRouteId.__wrap(ret);
     }
 }
@@ -5638,7 +5638,7 @@ export class RouteIdGroup {
         wasm.routeidgroup_addAll(this.__wbg_ptr, ptr0, len0);
     }
     clear() {
-        wasm.decapsulationkeygroup_clear(this.__wbg_ptr);
+        wasm.routeidgroup_clear(this.__wbg_ptr);
     }
     /**
      * @param {RouteId} typed_key
@@ -5646,7 +5646,7 @@ export class RouteIdGroup {
      */
     contains(typed_key) {
         _assertClass(typed_key, RouteId);
-        const ret = wasm.decapsulationkeygroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
+        const ret = wasm.routeidgroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -5688,7 +5688,7 @@ export class RouteIdGroup {
      */
     isEqual(other) {
         _assertClass(other, RouteIdGroup);
-        const ret = wasm.decapsulationkeygroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.routeidgroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     constructor() {
@@ -5823,7 +5823,7 @@ export class SecretKey {
      */
     isEqual(other) {
         _assertClass(other, SecretKey);
-        const ret = wasm.decapsulationkey_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.secretkey_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -5877,7 +5877,7 @@ export class SecretKey {
      * @returns {BareSecretKey}
      */
     get value() {
-        const ret = wasm.decapsulationkey_value(this.__wbg_ptr);
+        const ret = wasm.secretkey_value(this.__wbg_ptr);
         return BareSecretKey.__wrap(ret);
     }
 }
@@ -5933,7 +5933,7 @@ export class SecretKeyGroup {
         wasm.secretkeygroup_addAll(this.__wbg_ptr, ptr0, len0);
     }
     clear() {
-        wasm.decapsulationkeygroup_clear(this.__wbg_ptr);
+        wasm.secretkeygroup_clear(this.__wbg_ptr);
     }
     /**
      * @param {SecretKey} typed_key
@@ -5941,7 +5941,7 @@ export class SecretKeyGroup {
      */
     contains(typed_key) {
         _assertClass(typed_key, SecretKey);
-        const ret = wasm.decapsulationkeygroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
+        const ret = wasm.secretkeygroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -5983,7 +5983,7 @@ export class SecretKeyGroup {
      */
     isEqual(other) {
         _assertClass(other, SecretKeyGroup);
-        const ret = wasm.decapsulationkeygroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.secretkeygroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     constructor() {
@@ -6118,7 +6118,7 @@ export class SharedSecret {
      */
     isEqual(other) {
         _assertClass(other, SharedSecret);
-        const ret = wasm.decapsulationkey_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.sharedsecret_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -6172,7 +6172,7 @@ export class SharedSecret {
      * @returns {BareSharedSecret}
      */
     get value() {
-        const ret = wasm.decapsulationkey_value(this.__wbg_ptr);
+        const ret = wasm.sharedsecret_value(this.__wbg_ptr);
         return BareSharedSecret.__wrap(ret);
     }
 }
@@ -6228,7 +6228,7 @@ export class SharedSecretGroup {
         wasm.sharedsecretgroup_addAll(this.__wbg_ptr, ptr0, len0);
     }
     clear() {
-        wasm.decapsulationkeygroup_clear(this.__wbg_ptr);
+        wasm.sharedsecretgroup_clear(this.__wbg_ptr);
     }
     /**
      * @param {SharedSecret} typed_key
@@ -6236,7 +6236,7 @@ export class SharedSecretGroup {
      */
     contains(typed_key) {
         _assertClass(typed_key, SharedSecret);
-        const ret = wasm.decapsulationkeygroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
+        const ret = wasm.sharedsecretgroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -6278,7 +6278,7 @@ export class SharedSecretGroup {
      */
     isEqual(other) {
         _assertClass(other, SharedSecretGroup);
-        const ret = wasm.decapsulationkeygroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.sharedsecretgroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     constructor() {
@@ -6413,7 +6413,7 @@ export class Signature {
      */
     isEqual(other) {
         _assertClass(other, Signature);
-        const ret = wasm.decapsulationkey_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.signature_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -6467,7 +6467,7 @@ export class Signature {
      * @returns {BareSignature}
      */
     get value() {
-        const ret = wasm.decapsulationkey_value(this.__wbg_ptr);
+        const ret = wasm.signature_value(this.__wbg_ptr);
         return BareSignature.__wrap(ret);
     }
 }
@@ -6523,7 +6523,7 @@ export class SignatureGroup {
         wasm.signaturegroup_addAll(this.__wbg_ptr, ptr0, len0);
     }
     clear() {
-        wasm.decapsulationkeygroup_clear(this.__wbg_ptr);
+        wasm.signaturegroup_clear(this.__wbg_ptr);
     }
     /**
      * @param {Signature} typed_key
@@ -6531,7 +6531,7 @@ export class SignatureGroup {
      */
     contains(typed_key) {
         _assertClass(typed_key, Signature);
-        const ret = wasm.decapsulationkeygroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
+        const ret = wasm.signaturegroup_contains(this.__wbg_ptr, typed_key.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -6573,7 +6573,7 @@ export class SignatureGroup {
      */
     isEqual(other) {
         _assertClass(other, SignatureGroup);
-        const ret = wasm.decapsulationkeygroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
+        const ret = wasm.signaturegroup_isEqual(this.__wbg_ptr, other.__wbg_ptr);
         return ret !== 0;
     }
     constructor() {
@@ -8576,8 +8576,7 @@ function __wbg_get_imports() {
         __wbg_instanceof_Window_ed49b2db8df90359: function(arg0) {
             let result;
             try {
-                result = (typeof Window !== 'undefined' && arg0 instanceof Window) ||
-                         (typeof DedicatedWorkerGlobalScope !== 'undefined' && arg0 instanceof DedicatedWorkerGlobalScope);
+                result = arg0 instanceof Window;
             } catch (_) {
                 result = false;
             }
@@ -8978,7 +8977,7 @@ function __wbg_get_imports() {
             return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
         },
         __wbg_static_accessor_WINDOW_f8727f0cf888e0bd: function() {
-            const ret = typeof window === 'undefined' ? (typeof self === 'undefined' ? null : self) : window;
+            const ret = typeof window === 'undefined' ? null : window;
             return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
         },
         __wbg_subarray_a96e1fef17ed23cb: function(arg0, arg1, arg2) {
@@ -9066,32 +9065,32 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 2324, function: Function { arguments: [NamedExternref("CloseEvent")], shim_idx: 2325, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h097b2d2f988672ba, wasm_bindgen__convert__closures_____invoke__h80c00a3bb5bd4069);
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 3847, function: Function { arguments: [NamedExternref("CloseEvent")], shim_idx: 3848, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h13550bef4cfadba2, wasm_bindgen__convert__closures_____invoke__hbbcda065958ec79c);
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 4270, function: Function { arguments: [], shim_idx: 4271, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 4188, function: Function { arguments: [], shim_idx: 4189, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h67e7f18ef1093be6, wasm_bindgen__convert__closures_____invoke__h3d123557dfe3810f);
             return ret;
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 4439, function: Function { arguments: [Ref(NamedExternref("Event"))], shim_idx: 4440, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 4357, function: Function { arguments: [Ref(NamedExternref("Event"))], shim_idx: 4358, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h1f1456949e7feebc, wasm_bindgen__convert__closures________invoke__hf8b04ab3e157a9c7);
             return ret;
         },
         __wbindgen_cast_0000000000000004: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 4439, function: Function { arguments: [], shim_idx: 4442, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 4357, function: Function { arguments: [], shim_idx: 4360, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h1f1456949e7feebc, wasm_bindgen__convert__closures_____invoke__hbc720186ca49f6fc);
             return ret;
         },
         __wbindgen_cast_0000000000000005: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 4507, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 4508, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 4425, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 4426, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__hef1819e17944f779, wasm_bindgen__convert__closures_____invoke__h612e37a05935440f);
             return ret;
         },
         __wbindgen_cast_0000000000000006: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { dtor_idx: 4524, function: Function { arguments: [Externref], shim_idx: 4525, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { dtor_idx: 4442, function: Function { arguments: [Externref], shim_idx: 4443, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm.wasm_bindgen__closure__destroy__h18cb94768b1b0c14, wasm_bindgen__convert__closures_____invoke__hd570f2e2ea2c70e1);
             return ret;
         },
@@ -9139,8 +9138,8 @@ function wasm_bindgen__convert__closures_____invoke__hbc720186ca49f6fc(arg0, arg
     wasm.wasm_bindgen__convert__closures_____invoke__hbc720186ca49f6fc(arg0, arg1);
 }
 
-function wasm_bindgen__convert__closures_____invoke__h80c00a3bb5bd4069(arg0, arg1, arg2) {
-    wasm.wasm_bindgen__convert__closures_____invoke__h80c00a3bb5bd4069(arg0, arg1, arg2);
+function wasm_bindgen__convert__closures_____invoke__hbbcda065958ec79c(arg0, arg1, arg2) {
+    wasm.wasm_bindgen__convert__closures_____invoke__hbbcda065958ec79c(arg0, arg1, arg2);
 }
 
 function wasm_bindgen__convert__closures________invoke__hf8b04ab3e157a9c7(arg0, arg1, arg2) {
