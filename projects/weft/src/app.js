@@ -112,7 +112,7 @@ class Veilid {
     });
   }
 
-  init(bootstrapUrl) { return this.call('init', { bootstrapUrl }); }
+  init() { return this.call('init', {}); }
   generateKeyPair() { return this.call('generateKeyPair'); }
   setIdentity(publicKey, secretKey) {
     return this.call('setIdentity', { publicKey, secretKey });
@@ -197,8 +197,6 @@ const state = {
 let db;
 let veilid;
 
-const BOOTSTRAP_URL = 'wss://veilid.andymolenda.com/ws';
-
 // --- State helpers ---
 
 function setState(patch) {
@@ -253,6 +251,12 @@ async function broadcastToPeers(envelope) {
 
 function handleVeilidUpdate(update) {
   if (!update) return;
+
+  // Debug log messages from worker
+  if (update.kind === 'Log') {
+    log.info(update.message);
+    return;
+  }
 
   // Attachment state changes
   if (update.kind === 'Attachment') {
@@ -837,7 +841,7 @@ async function bootVeilid() {
     log.info('Veilid: loading WASM...');
     setState({ veilidState: 'loading' });
     veilid = new Veilid(handleVeilidUpdate);
-    await veilid.init(BOOTSTRAP_URL);
+    await veilid.init();
     log.ok('Veilid: core started, attaching to network...');
     setState({ veilidState: 'connecting' });
 

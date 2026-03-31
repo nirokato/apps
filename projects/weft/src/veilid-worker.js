@@ -67,14 +67,14 @@ function parseKeyPair(kp) {
 
 // --- Initialization ---
 
-async function initVeilid({ bootstrapUrl }) {
+async function initVeilid() {
   // 1. Load WASM binary
   await init();
 
   // 2. Initialize core (platform/logging config)
   await veilidClient.initializeCore({
     logging: {
-      api: { enabled: true, level: 'Info' },
+      api: { enabled: true, level: 'Debug' },
       performance: { enabled: false, level: 'Info', logsInTimings: false, logsInConsole: false },
     },
   });
@@ -82,16 +82,29 @@ async function initVeilid({ bootstrapUrl }) {
   // 3. Get default config and customize for browser WASM
   const config = veilidClient.defaultConfig();
 
-  // Replace default bootstrap list (which uses ws://) with our WSS-only node.
-  // HTTPS pages block ws:// connections (mixed content), so we can only use wss://.
-  if (bootstrapUrl) {
-    config.network.routingTable.bootstrap = [bootstrapUrl];
+  // Debug: dump default config to understand what bootstrap/protocol we're working with
+  function debugLog(msg) {
+    self.postMessage({ type: 'update', update: { kind: 'Log', log_level: 'Info', message: msg } });
   }
-  // WS/WSS: connect only, no listen (WASM can't listen)
+  debugLog('[veilid-worker] Default bootstrap: ' + JSON.stringify(config.network.routingTable.bootstrap));
+  debugLog('[veilid-worker] Default WS config: ' + JSON.stringify(config.network.protocol.ws));
+  debugLog('[veilid-worker] Default WSS config: ' + JSON.stringify(config.network.protocol.wss || 'NOT PRESENT'));
+
+  // Use the default bootstrap list — connects to the public Veilid network.
+  // Our veilid-server (veilid.andymolenda.com) advertises its WSS URL to the
+  // network so WASM clients can discover it via the DHT after bootstrapping.
+
+  // WS/WSS: connect only, no listen (WASM can't accept incoming)
   config.network.protocol.ws.connect = true;
   config.network.protocol.ws.listen = false;
+  if (!config.network.protocol.wss) {
+    config.network.protocol.wss = {};
+  }
   config.network.protocol.wss.connect = true;
   config.network.protocol.wss.listen = false;
+
+  debugLog('[veilid-worker] Final WS config: ' + JSON.stringify(config.network.protocol.ws));
+  debugLog('[veilid-worker] Final WSS config: ' + JSON.stringify(config.network.protocol.wss));
 
   config.programName = 'weft';
   config.namespace = 'weft';
