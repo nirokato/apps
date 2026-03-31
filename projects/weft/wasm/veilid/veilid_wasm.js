@@ -8977,7 +8977,7 @@ function __wbg_get_imports() {
             return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
         },
         __wbg_static_accessor_WINDOW_f8727f0cf888e0bd: function() {
-            const ret = typeof window === 'undefined' ? null : window;
+            const ret = typeof window === 'undefined' ? (typeof self === 'undefined' ? null : self) : window;
             return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
         },
         __wbg_subarray_a96e1fef17ed23cb: function(arg0, arg1, arg2) {
