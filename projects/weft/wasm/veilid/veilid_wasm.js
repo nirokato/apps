@@ -8576,7 +8576,8 @@ function __wbg_get_imports() {
         __wbg_instanceof_Window_ed49b2db8df90359: function(arg0) {
             let result;
             try {
-                result = arg0 instanceof Window;
+                result = arg0 instanceof Window ||
+                    (typeof DedicatedWorkerGlobalScope !== 'undefined' && arg0 instanceof DedicatedWorkerGlobalScope);
             } catch (_) {
                 result = false;
             }
@@ -8977,7 +8978,7 @@ function __wbg_get_imports() {
             return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
         },
         __wbg_static_accessor_WINDOW_f8727f0cf888e0bd: function() {
-            const ret = typeof window === 'undefined' ? null : window;
+            const ret = typeof window !== 'undefined' ? window : (typeof self !== 'undefined' ? self : null);
             return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
         },
         __wbg_subarray_a96e1fef17ed23cb: function(arg0, arg1, arg2) {
