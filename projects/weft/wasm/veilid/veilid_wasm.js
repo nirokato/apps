@@ -8576,7 +8576,8 @@ function __wbg_get_imports() {
         __wbg_instanceof_Window_ed49b2db8df90359: function(arg0) {
             let result;
             try {
-                result = arg0 instanceof Window;
+                result = (typeof Window !== 'undefined' && arg0 instanceof Window) ||
+                         (typeof DedicatedWorkerGlobalScope !== 'undefined' && arg0 instanceof DedicatedWorkerGlobalScope);
             } catch (_) {
                 result = false;
             }
