@@ -5,6 +5,23 @@
 if (typeof window === 'undefined') {
   self.window = self;
 }
+// Make Window constructor available so instanceof checks work
+if (typeof Window === 'undefined') {
+  self.Window = self.constructor;
+}
+
+// Diagnostics — log what APIs are available in this Worker
+console.log('[veilid-worker] Worker environment diagnostics:');
+console.log('  typeof window:', typeof window);
+console.log('  typeof Window:', typeof Window);
+console.log('  typeof self:', typeof self);
+console.log('  self.constructor.name:', self.constructor?.name);
+console.log('  typeof indexedDB:', typeof indexedDB);
+console.log('  typeof localStorage:', typeof localStorage);
+console.log('  typeof crypto:', typeof crypto);
+console.log('  typeof fetch:', typeof fetch);
+console.log('  window === self:', window === self);
+console.log('  self instanceof Window:', self instanceof Window);
 if (typeof self.localStorage === 'undefined') {
   // In-memory localStorage shim for Workers (Veilid uses it for table store)
   const store = new Map();
