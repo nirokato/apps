@@ -64,6 +64,11 @@ class DB {
   searchMessages(roomId, query, limit) {
     return this.call('searchMessages', { roomId, query, limit });
   }
+  getDbVersion() { return this.call('getDbVersion'); }
+  getChanges(sinceVersion, limit) {
+    return this.call('getChanges', { sinceVersion, limit });
+  }
+  applyChanges(changes) { return this.call('applyChanges', { changes }); }
 }
 
 // --- Veilid Worker interface ---
@@ -175,6 +180,10 @@ const state = {
   // Veilid connection state
   veilidState: 'loading', // loading | connecting | connected | offline | error
   veilidError: null,
+  // P2P state (transient, not persisted)
+  localRoute: null,    // { routeId, blob } — our private route for receiving messages
+  peerRoutes: {},      // { publicKey: routeBlob } — known peer routes for sending
+  onlinePeers: 0,      // count of peers with known routes
 };
 
 let db;
@@ -193,6 +202,45 @@ function render() {
   renderApp(state, handlers);
 }
 
+// --- P2P message protocol ---
+// Messages sent over AppMessage are JSON-encoded envelopes.
+// When a room has an encryption key, the payload is encrypted.
+
+function encodeEnvelope(envelope) {
+  return new TextEncoder().encode(JSON.stringify(envelope));
+}
+
+function decodeEnvelope(data) {
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+// Send an envelope to a specific peer by importing their route blob first
+async function sendToPeer(routeBlob, data) {
+  // Import the route blob to get a RouteId the Veilid API can use
+  const { routeId } = await veilid.importRoute(routeBlob);
+  await veilid.sendAppMessage(routeId, Array.from(data));
+}
+
+// Broadcast an envelope to all known peers in the current room
+async function broadcastToPeers(envelope) {
+  if (!veilid || state.veilidState !== 'connected') return;
+
+  const data = encodeEnvelope(envelope);
+
+  for (const [peerKey, routeBlob] of Object.entries(state.peerRoutes)) {
+    if (peerKey === state.identity?.public_key) continue; // skip self
+    try {
+      await sendToPeer(routeBlob, data);
+    } catch (e) {
+      console.warn(`[P2P] Failed to send to ${peerKey.slice(0, 16)}:`, e.message);
+      // Route may be stale — remove it
+      delete state.peerRoutes[peerKey];
+      setState({ onlinePeers: Object.keys(state.peerRoutes).length });
+    }
+  }
+}
+
 // --- Veilid update handler ---
 
 function handleVeilidUpdate(update) {
@@ -201,14 +249,15 @@ function handleVeilidUpdate(update) {
   // Attachment state changes
   if (update.kind === 'Attachment') {
     const attachState = update.state;
-    if (attachState === 'AttachedGood' || attachState === 'AttachedStrong' || attachState === 'FullyAttached') {
+    if (attachState === 'AttachedGood' || attachState === 'AttachedStrong' ||
+        attachState === 'FullyAttached' || attachState === 'OverAttached') {
       setState({ veilidState: 'connected' });
+      // Create our private route once connected
+      setupLocalRoute();
     } else if (attachState === 'AttachedWeak' || attachState === 'Attaching') {
       setState({ veilidState: 'connecting' });
     } else if (attachState === 'Detached' || attachState === 'Detaching') {
       setState({ veilidState: 'offline' });
-    } else if (attachState === 'OverAttached') {
-      setState({ veilidState: 'connected' });
     }
   }
 
@@ -228,22 +277,196 @@ function handleVeilidUpdate(update) {
   }
 }
 
+// Create our private route for receiving P2P messages
+async function setupLocalRoute() {
+  if (state.localRoute) return; // already set up
+  try {
+    const route = await veilid.createPrivateRoute();
+    setState({ localRoute: route });
+    console.log('[P2P] Local route created');
+
+    // If we're in a room with a DHT key, publish our route
+    if (state.currentRoom?.dht_key) {
+      publishPresence();
+    }
+  } catch (e) {
+    console.warn('[P2P] Failed to create local route:', e.message);
+  }
+}
+
+// Publish our presence (route blob) to the room's DHT record
+async function publishPresence() {
+  if (!state.localRoute || !state.currentRoom?.dht_key) return;
+  if (!veilid || state.veilidState !== 'connected') return;
+
+  try {
+    const ownerKp = state.currentRoom.owner_key && state.currentRoom.owner_secret
+      ? `${state.currentRoom.owner_key}:${state.currentRoom.owner_secret}`
+      : null;
+
+    // Open DHT record (needed before writing)
+    await veilid.openRoomDHT(state.currentRoom.dht_key, ownerKp);
+
+    // Write presence to subkey 1 (owner's presence subkey)
+    await veilid.writePresence(state.currentRoom.dht_key, 1, {
+      v: 1,
+      display_name: state.identity?.display_name || '',
+      public_key: state.identity?.public_key || '',
+      route_blob: Array.from(state.localRoute.blob || []),
+      status: 'online',
+      last_seen: new Date().toISOString(),
+      db_version: await db.getDbVersion(),
+    });
+    console.log('[P2P] Presence published to DHT');
+  } catch (e) {
+    console.warn('[P2P] Failed to publish presence:', e.message);
+  }
+}
+
+// Handle incoming AppMessage
 async function handleAppMessage(update) {
-  // update: { kind: 'AppMessage', message: Uint8Array, sender: ... }
-  // For now, log it. Full message handling comes with room integration.
-  console.log('[Veilid] AppMessage received:', update);
+  try {
+    const envelope = decodeEnvelope(update.message);
+    console.log('[P2P] Received:', envelope.type, 'from', (envelope.senderKey || '').slice(0, 16));
+
+    switch (envelope.type) {
+      case 'chat_message':
+        await handleChatMessage(envelope);
+        break;
+      case 'join':
+        await handleJoinMessage(envelope);
+        break;
+      case 'welcome':
+        await handleWelcomeMessage(envelope);
+        break;
+      case 'sync_req':
+        await handleSyncRequest(envelope);
+        break;
+      case 'sync_resp':
+        await handleSyncResponse(envelope);
+        break;
+      default:
+        console.log('[P2P] Unknown message type:', envelope.type);
+    }
+  } catch (e) {
+    console.warn('[P2P] Failed to handle AppMessage:', e.message);
+  }
+}
+
+// Process incoming chat message — insert into DB, refresh UI
+async function handleChatMessage(envelope) {
+  const { roomId, id, topic, senderKey, content, createdAt } = envelope;
+
+  // Verify this message is for a room we're in
+  const room = await db.getRoom(roomId);
+  if (!room) return;
+
+  // Insert message (idempotent — ULID PK prevents duplicates)
+  try {
+    await db.call('postMessage', {
+      id, roomId, topic, senderKey, content
+    });
+  } catch (e) {
+    // Likely duplicate — ignore
+    if (!e.message.includes('UNIQUE')) console.warn('[P2P] Insert error:', e.message);
+    return;
+  }
+
+  // Add sender as member if not already known
+  await db.addMember(roomId, senderKey, '', 'member');
+
+  // Refresh UI if we're viewing this room
+  if (state.currentRoom?.id === roomId) {
+    const topics = await db.getTopics(roomId);
+    const msgs = await db.getMessages(roomId, topic);
+    state.topicMessages[topic] = msgs;
+
+    const unreadRows = await db.getUnreadCounts(roomId);
+    const unreadCounts = {};
+    for (const r of unreadRows) unreadCounts[r.topic] = r.unread;
+
+    setState({ topics, unreadCounts });
+  }
+}
+
+// Handle join request — a peer wants to join our room
+async function handleJoinMessage(envelope) {
+  const { senderKey, displayName, routeBlob, roomId } = envelope;
+
+  // Store their route for future messages
+  if (routeBlob) {
+    state.peerRoutes[senderKey] = routeBlob;
+    setState({ onlinePeers: Object.keys(state.peerRoutes).length });
+  }
+
+  // Add them as a member
+  if (roomId) {
+    await db.addMember(roomId, senderKey, displayName || '', 'member');
+    if (state.currentRoom?.id === roomId) {
+      const members = await db.getMembers(roomId);
+      setState({ members });
+    }
+  }
+
+  // Send welcome back with our route and current state
+  if (routeBlob && state.localRoute) {
+    const welcomeEnvelope = {
+      type: 'welcome',
+      senderKey: state.identity.public_key,
+      displayName: state.identity.display_name,
+      routeBlob: Array.from(state.localRoute.blob || []),
+      roomId,
+    };
+    try {
+      await sendToPeer(routeBlob, encodeEnvelope(welcomeEnvelope));
+    } catch (e) {
+      console.warn('[P2P] Failed to send welcome:', e.message);
+    }
+  }
+
+  console.log('[P2P] Peer joined:', senderKey.slice(0, 16), displayName);
+}
+
+// Handle welcome response — room owner acknowledged our join
+async function handleWelcomeMessage(envelope) {
+  const { senderKey, displayName, routeBlob, roomId } = envelope;
+
+  if (routeBlob) {
+    state.peerRoutes[senderKey] = routeBlob;
+    setState({ onlinePeers: Object.keys(state.peerRoutes).length });
+  }
+
+  if (roomId) {
+    await db.addMember(roomId, senderKey, displayName || '', 'member');
+    if (state.currentRoom?.id === roomId) {
+      const members = await db.getMembers(roomId);
+      setState({ members });
+    }
+  }
+
+  console.log('[P2P] Welcome from:', senderKey.slice(0, 16), displayName);
 }
 
 async function handleAppCall(update) {
-  // update: { kind: 'AppCall', call_id: string, message: Uint8Array, sender: ... }
   console.log('[Veilid] AppCall received:', update);
-  // TODO: handle sync requests
+  // Phase 4: handle sync requests via AppCall
 }
 
 async function handleValueChange(update) {
-  // update: { kind: 'ValueChange', key: string, subkeys: [...], count: number, value: ... }
   console.log('[Veilid] ValueChange:', update);
-  // TODO: handle presence updates
+  // Future: handle presence updates from DHT watch
+}
+
+// Handle sync request (Phase 4 — basic implementation)
+async function handleSyncRequest(envelope) {
+  // Future: send cr-sqlite changesets back
+  console.log('[P2P] Sync request from:', envelope.senderKey?.slice(0, 16));
+}
+
+// Handle sync response (Phase 4 — basic implementation)
+async function handleSyncResponse(envelope) {
+  // Future: apply cr-sqlite changesets
+  console.log('[P2P] Sync response, changes:', envelope.changes?.length);
 }
 
 // --- Handlers (passed to UI) ---
@@ -276,6 +499,85 @@ const handlers = {
     }
   },
 
+  // Join a room via invite (dht_key + encryption_key)
+  async joinRoom(dhtKey, encryptionKey) {
+    if (!dhtKey.trim()) {
+      setState({ error: 'DHT key is required to join a room' });
+      return;
+    }
+
+    try {
+      if (!veilid || state.veilidState !== 'connected') {
+        setState({ error: 'Not connected to Veilid network. Please wait for connection.' });
+        return;
+      }
+
+      // Open the DHT record and read room metadata
+      const dhtResult = await veilid.openRoomDHT(dhtKey.trim());
+      if (!dhtResult.metadata) {
+        setState({ error: 'Could not read room metadata from DHT' });
+        return;
+      }
+
+      const meta = dhtResult.metadata;
+
+      // Create room locally
+      const room = await db.createRoom(
+        meta.name || 'Unnamed Room',
+        meta.created_by || '',
+        dhtKey.trim(),
+        '', '', // no owner key/secret for joiners
+        encryptionKey.trim()
+      );
+
+      // Add self as member
+      await db.updateMemberName(room.id, state.identity.public_key, state.identity.display_name);
+
+      // Add existing members from metadata
+      if (meta.member_keys) {
+        for (const mk of meta.member_keys) {
+          await db.addMember(room.id, mk, '', 'member');
+        }
+      }
+
+      // Read creator's presence from subkey 1 to get their route
+      try {
+        const presence = await veilid.readPresence(dhtKey.trim(), 1);
+        if (presence?.route_blob) {
+          state.peerRoutes[presence.public_key] = presence.route_blob;
+
+          // Send join message to creator
+          if (state.localRoute) {
+            const joinEnvelope = {
+              type: 'join',
+              senderKey: state.identity.public_key,
+              displayName: state.identity.display_name,
+              routeBlob: Array.from(state.localRoute.blob || []),
+              roomId: room.id,
+            };
+            await sendToPeer(presence.route_blob, encodeEnvelope(joinEnvelope));
+            console.log('[P2P] Join message sent to room creator');
+          }
+        }
+      } catch (e) {
+        console.warn('[P2P] Could not read creator presence:', e.message);
+      }
+
+      // Watch the DHT record for changes
+      try {
+        await veilid.watchRoom(dhtKey.trim());
+      } catch (e) {
+        console.warn('[P2P] Failed to watch room DHT:', e.message);
+      }
+
+      const rooms = await db.getRooms();
+      setState({ rooms, onlinePeers: Object.keys(state.peerRoutes).length });
+      await handlers.enterRoom(room.id);
+    } catch (e) {
+      setState({ error: 'Failed to join room: ' + e.message });
+    }
+  },
+
   async enterRoom(roomId) {
     const room = await db.getRoom(roomId);
     const topics = await db.getTopics(roomId);
@@ -301,6 +603,11 @@ const handlers = {
       searchQuery: '',
       searchResults: null,
     });
+
+    // If room has DHT key and we're connected, publish presence
+    if (room.dht_key && veilid && state.veilidState === 'connected') {
+      publishPresence();
+    }
   },
 
   async toggleTopic(topic) {
@@ -330,7 +637,18 @@ const handlers = {
 
   async sendMessage(topic, content) {
     if (!content.trim()) return;
-    await db.postMessage(state.currentRoom.id, topic, state.identity.public_key, content.trim());
+    const msg = await db.postMessage(state.currentRoom.id, topic, state.identity.public_key, content.trim());
+
+    // Broadcast to peers via AppMessage
+    broadcastToPeers({
+      type: 'chat_message',
+      roomId: state.currentRoom.id,
+      id: msg.id,
+      topic,
+      senderKey: state.identity.public_key,
+      content: content.trim(),
+      createdAt: msg.created_at,
+    });
 
     // Refresh topic data
     const topics = await db.getTopics(state.currentRoom.id);
@@ -350,9 +668,20 @@ const handlers = {
 
   async sendNewTopic(topic, content) {
     if (!topic.trim() || !content.trim()) return;
-    await db.postMessage(
+    const msg = await db.postMessage(
       state.currentRoom.id, topic.trim(), state.identity.public_key, content.trim()
     );
+
+    // Broadcast to peers
+    broadcastToPeers({
+      type: 'chat_message',
+      roomId: state.currentRoom.id,
+      id: msg.id,
+      topic: topic.trim(),
+      senderKey: state.identity.public_key,
+      content: content.trim(),
+      createdAt: msg.created_at,
+    });
 
     const topics = await db.getTopics(state.currentRoom.id);
     const msgs = await db.getMessages(state.currentRoom.id, topic.trim());
@@ -418,6 +747,8 @@ const handlers = {
       topicMessages: {},
       expandedTopics: new Set(),
       rooms,
+      peerRoutes: {},
+      onlinePeers: 0,
     });
   },
 
@@ -430,6 +761,26 @@ const handlers = {
       setState({ identity: { ...state.identity, display_name: name.trim() }, members });
     } else {
       setState({ identity: { ...state.identity, display_name: name.trim() } });
+    }
+  },
+
+  // Copy invite text to clipboard (dht_key + encryption_key)
+  async copyInvite() {
+    if (!state.currentRoom?.dht_key) {
+      setState({ error: 'This room has no DHT key (local-only room)' });
+      return;
+    }
+    const invite = [state.currentRoom.dht_key, state.currentRoom.encryption_key].filter(Boolean).join('\n');
+    try {
+      await navigator.clipboard.writeText(invite);
+    } catch (e) {
+      // Fallback: select text in a temporary textarea
+      const ta = document.createElement('textarea');
+      ta.value = invite;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
     }
   },
 
@@ -498,4 +849,3 @@ async function bootVeilid() {
 }
 
 boot();
-

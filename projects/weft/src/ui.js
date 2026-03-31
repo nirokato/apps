@@ -97,6 +97,19 @@ function renderSetup(state, h) {
           }}>Create room</button>
         </div>
         <div class="action-row">
+          <input type="text" id="join-dht-key" class="input" placeholder="Paste invite (DHT key)"
+            style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;">
+          <button class="btn btn-secondary" @click=${() => {
+            const input = document.getElementById('join-dht-key');
+            const val = input.value.trim();
+            if (!val) return;
+            // Parse: first line = dht_key, optional second line = encryption_key
+            const parts = val.split('\n').map(s => s.trim()).filter(Boolean);
+            h.joinRoom(parts[0], parts[1] || '');
+            input.value = '';
+          }}>Join room</button>
+        </div>
+        <div class="action-row">
           <label class="btn btn-secondary import-label">
             Import room
             <input type="file" accept=".json" hidden @change=${(e) => {
@@ -135,6 +148,7 @@ function renderChat(state, h) {
         </div>
         <div class="header-right">
           ${renderConnectionStatus(state)}
+          ${state.onlinePeers > 0 ? html`<span class="peer-count" title="${state.onlinePeers} peer(s) online">${state.onlinePeers}p</span>` : ''}
           <button class="btn-icon" @click=${h.showSettings} title="Settings">&#9881;</button>
         </div>
       </header>
@@ -303,6 +317,18 @@ function renderSettings(state, h) {
             <code class="setting-value">${state.currentRoom.id}</code>
             <label class="setting-label">Created</label>
             <code class="setting-value">${formatTime(state.currentRoom.created_at)}</code>
+            ${state.currentRoom.dht_key ? html`
+              <label class="setting-label">DHT Key</label>
+              <code class="setting-value" style="word-break:break-all;font-size:0.75rem;">${state.currentRoom.dht_key}</code>
+              <label class="setting-label">Status</label>
+              <code class="setting-value">${state.onlinePeers || 0} peer${state.onlinePeers !== 1 ? 's' : ''} online</code>
+              <div class="action-row" style="margin-top:0.5rem;">
+                <button class="btn btn-secondary" @click=${h.copyInvite}>Copy invite</button>
+              </div>
+            ` : html`
+              <label class="setting-label">Network</label>
+              <code class="setting-value">Local-only (no DHT key)</code>
+            `}
           </div>
 
           <div class="setting-group">

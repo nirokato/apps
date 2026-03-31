@@ -21,6 +21,7 @@ import init, {
 let routingCtx = null;
 let crypto = null;
 let identity = null; // { publicKey, secretKey, keyPair }
+const importedRoutes = new Map(); // routeId string → RouteId WASM object
 
 // --- Update callback — posts Veilid events to main thread ---
 
@@ -125,7 +126,9 @@ async function createPrivateRoute() {
 
 async function importRoute({ blob }) {
   const routeId = veilidClient.importRemotePrivateRoute(new Uint8Array(blob));
-  return { routeId: routeId.toString() };
+  const routeIdStr = routeId.toString();
+  importedRoutes.set(routeIdStr, routeId); // cache for appMessage
+  return { routeId: routeIdStr };
 }
 
 async function releaseRoute({ routeId }) {
@@ -310,7 +313,10 @@ async function sendAppMessage({ target, message }) {
   const msgBytes = typeof message === 'string'
     ? new TextEncoder().encode(message)
     : new Uint8Array(message);
-  await routingCtx.appMessage(target, msgBytes);
+  // target can be a routeId string (look up cached WASM object) or passed directly
+  const routeId = typeof target === 'string' ? importedRoutes.get(target) : target;
+  if (!routeId) throw new Error('Unknown route: ' + target + '. Import the route first.');
+  await routingCtx.appMessage(routeId, msgBytes);
   return { ok: true };
 }
 
