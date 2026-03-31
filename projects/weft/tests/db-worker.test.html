@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html><head><title>Test: DB Worker</title></head>
+<body>
+<script type="module">
+import { t } from './harness.js';
+
+// --- Worker helper: unique DB per test run ---
+const DB_NAME = 'weft-test-' + Math.random().toString(36).slice(2);
+let callId = 0;
+const pending = new Map();
+const worker = new Worker('../src/db-worker.js', { type: 'module' });
+
+worker.onmessage = (e) => {
+  const { id, result, error } = e.data;
+  const p = pending.get(id);
+  if (!p) return;
+  pending.delete(id);
+  if (error) p.reject(new Error(error));
+  else p.resolve(result);
+};
+
+function call(action, params) {
+  return new Promise((resolve, reject) => {
+    const id = callId++;
+    pending.set(id, { resolve, reject });
+    worker.postMessage({ id, action, params });
+  });
+}
+
+// ============================================================
+// Schema & Initialization
+// ============================================================
+
+t.test('init: database initializes successfully', async (a) => {
+  const result = await call('init');
+  a.ok(result.ok, 'init returned ok');
+  a.ok(result.siteId, 'siteId is set');
+  a.equal(result.siteId.length, 32, 'siteId is 32 hex chars');
+});
+
+t.test('init: siteId is stable across calls', async (a) => {
+  const id1 = await call('getSiteId');
+  const id2 = await call('getSiteId');
+  a.equal(id1, id2, 'siteId consistent');
+});
+
+// ============================================================
+// Identity
+// ============================================================
+
+t.test('identity: getIdentity returns null on empty DB', async (a) => {
+  const id = await call('getIdentity');
+  a.equal(id, null, 'no identity yet');
+});
+
+t.test('identity: createIdentity stores and returns identity', async (a) => {
+  const id = await call('createIdentity', { publicKey: 'VLD0:testkey1', displayName: 'Alice' });
+  a.equal(id.public_key, 'VLD0:testkey1');
+  a.equal(id.display_name, 'Alice');
+  a.ok(id.created_at, 'created_at is set');
+});
+
+t.test('identity: getIdentity returns stored identity', async (a) => {
+  const id = await call('getIdentity');
+  a.equal(id.public_key, 'VLD0:testkey1');
+  a.equal(id.display_name, 'Alice');
+});
+
+t.test('identity: createIdentity replaces on same id', async (a) => {
+  await call('createIdentity', { publicKey: 'VLD0:testkey2', displayName: 'Bob' });
+  const id = await call('getIdentity');
+  a.equal(id.public_key, 'VLD0:testkey2');
+  a.equal(id.display_name, 'Bob');
+});
+
+// ============================================================
+// Rooms
+// ============================================================
+
+t.test('rooms: getRooms returns empty array initially', async (a) => {
+  const rooms = await call('getRooms');
+  a.deepEqual(rooms, []);
+});
+
+t.test('rooms: createRoom inserts room and owner member', async (a) => {
+  const room = await call('createRoom', {
+    id: 'room-1', name: 'Test Room', createdBy: 'VLD0:testkey2'
+  });
+  a.equal(room.id, 'room-1');
+  a.equal(room.name, 'Test Room');
+  a.equal(room.created_by, 'VLD0:testkey2');
+  a.ok(room.created_at, 'has created_at');
+});
+
+t.test('rooms: createRoom with DHT fields stores them', async (a) => {
+  const room = await call('createRoom', {
+    id: 'room-2', name: 'DHT Room', createdBy: 'VLD0:testkey2',
+    dhtKey: 'VLD0:dht999', ownerKey: 'VLD0:owner999',
+    ownerSecret: 'VLD0:secret999', encryptionKey: 'VLD0:enc999'
+  });
+  a.equal(room.dht_key, 'VLD0:dht999');
+  a.equal(room.owner_key, 'VLD0:owner999');
+  a.equal(room.encryption_key, 'VLD0:enc999');
+});
+
+t.test('rooms: createRoom without DHT fields defaults to empty', async (a) => {
+  const room = await call('getRoom', { roomId: 'room-1' });
+  a.equal(room.dht_key, '');
+  a.equal(room.owner_key, '');
+  a.equal(room.encryption_key, '');
+});
+
+t.test('rooms: getRooms returns rooms in DESC created_at order', async (a) => {
+  const rooms = await call('getRooms');
+  a.equal(rooms.length, 2);
+  // room-2 was created after room-1
+  a.equal(rooms[0].id, 'room-2');
+  a.equal(rooms[1].id, 'room-1');
+});
+
+t.test('rooms: getRoom returns null for unknown id', async (a) => {
+  const room = await call('getRoom', { roomId: 'nonexistent' });
+  a.equal(room, null);
+});
+
+t.test('rooms: createRoom auto-adds creator as owner member', async (a) => {
+  const members = await call('getMembers', { roomId: 'room-1' });
+  a.equal(members.length, 1);
+  a.equal(members[0].public_key, 'VLD0:testkey2');
+  a.equal(members[0].role, 'owner');
+});
+
+// ============================================================
+// Members
+// ============================================================
+
+t.test('members: addMember inserts a member', async (a) => {
+  await call('addMember', {
+    roomId: 'room-1', publicKey: 'VLD0:carol', displayName: 'Carol', role: 'member'
+  });
+  const members = await call('getMembers', { roomId: 'room-1' });
+  a.equal(members.length, 2);
+});
+
+t.test('members: addMember is idempotent (INSERT OR IGNORE)', async (a) => {
+  await call('addMember', {
+    roomId: 'room-1', publicKey: 'VLD0:carol', displayName: 'Carol2', role: 'admin'
+  });
+  const members = await call('getMembers', { roomId: 'room-1' });
+  a.equal(members.length, 2, 'still 2 members');
+  const carol = members.find(m => m.public_key === 'VLD0:carol');
+  a.equal(carol.display_name, 'Carol', 'original name preserved');
+});
+
+t.test('members: updateMemberName changes display name', async (a) => {
+  await call('updateMemberName', {
+    roomId: 'room-1', publicKey: 'VLD0:carol', displayName: 'Caroline'
+  });
+  const members = await call('getMembers', { roomId: 'room-1' });
+  const carol = members.find(m => m.public_key === 'VLD0:carol');
+  a.equal(carol.display_name, 'Caroline');
+});
+
+t.test('members: getMembers ordered by joined_at ASC', async (a) => {
+  const members = await call('getMembers', { roomId: 'room-1' });
+  a.equal(members[0].public_key, 'VLD0:testkey2', 'owner first');
+  a.equal(members[1].public_key, 'VLD0:carol', 'member second');
+});
+
+// ============================================================
+// Messages
+// ============================================================
+
+t.test('messages: postMessage creates a message', async (a) => {
+  const msg = await call('postMessage', {
+    id: 'msg-1', roomId: 'room-1', topic: 'general',
+    senderKey: 'VLD0:testkey2', content: 'Hello world!'
+  });
+  a.equal(msg.id, 'msg-1');
+  a.equal(msg.topic, 'general');
+  a.equal(msg.content, 'Hello world!');
+  a.equal(msg.deleted, 0);
+});
+
+t.test('messages: postMessage to new topic auto-creates topic', async (a) => {
+  await call('postMessage', {
+    id: 'msg-2', roomId: 'room-1', topic: 'random',
+    senderKey: 'VLD0:carol', content: 'Hey there'
+  });
+  const topics = await call('getTopics', { roomId: 'room-1' });
+  a.equal(topics.length, 2);
+});
+
+t.test('messages: getMessages returns messages in ASC order', async (a) => {
+  await call('postMessage', {
+    id: 'msg-3', roomId: 'room-1', topic: 'general',
+    senderKey: 'VLD0:carol', content: 'Reply'
+  });
+  const msgs = await call('getMessages', { roomId: 'room-1', topic: 'general' });
+  a.equal(msgs.length, 2);
+  a.equal(msgs[0].id, 'msg-1', 'first message first');
+  a.equal(msgs[1].id, 'msg-3', 'second message second');
+});
+
+t.test('messages: getMessages joins sender_name from members', async (a) => {
+  const msgs = await call('getMessages', { roomId: 'room-1', topic: 'general' });
+  a.equal(msgs[1].sender_name, 'Caroline', 'Carol renamed to Caroline');
+});
+
+t.test('messages: getMessages respects limit and offset', async (a) => {
+  const page1 = await call('getMessages', { roomId: 'room-1', topic: 'general', limit: 1, offset: 0 });
+  a.equal(page1.length, 1);
+  a.equal(page1[0].id, 'msg-1');
+
+  const page2 = await call('getMessages', { roomId: 'room-1', topic: 'general', limit: 1, offset: 1 });
+  a.equal(page2.length, 1);
+  a.equal(page2[0].id, 'msg-3');
+});
+
+// ============================================================
+// Topics
+// ============================================================
+
+t.test('topics: getTopics returns correct stats', async (a) => {
+  const topics = await call('getTopics', { roomId: 'room-1' });
+  const general = topics.find(t => t.topic === 'general');
+  a.equal(general.message_count, 2);
+  a.equal(general.participants, 2, '2 distinct senders');
+});
+
+t.test('topics: sorted by last_activity DESC', async (a) => {
+  const topics = await call('getTopics', { roomId: 'room-1' });
+  // general has msg-3 (latest), random has msg-2
+  a.equal(topics[0].topic, 'general', 'most recent first');
+});
+
+t.test('topics: empty room returns empty array', async (a) => {
+  const topics = await call('getTopics', { roomId: 'room-2' });
+  a.deepEqual(topics, []);
+});
+
+// ============================================================
+// Unread Counts & Read Cursors
+// ============================================================
+
+t.test('unread: all messages unread initially', async (a) => {
+  const counts = await call('getUnreadCounts', { roomId: 'room-1' });
+  const general = counts.find(c => c.topic === 'general');
+  a.equal(general.unread, 2, '2 unread in general');
+});
+
+t.test('unread: markRead reduces count', async (a) => {
+  await call('markRead', { roomId: 'room-1', topic: 'general', messageId: 'msg-1' });
+  const counts = await call('getUnreadCounts', { roomId: 'room-1' });
+  const general = counts.find(c => c.topic === 'general');
+  a.equal(general.unread, 1, '1 unread after reading msg-1');
+});
+
+t.test('unread: markRead all clears count', async (a) => {
+  await call('markRead', { roomId: 'room-1', topic: 'general', messageId: 'msg-3' });
+  const counts = await call('getUnreadCounts', { roomId: 'room-1' });
+  const general = counts.find(c => c.topic === 'general');
+  a.equal(general, undefined, 'no unread entry when all read');
+});
+
+t.test('unread: per-topic isolation', async (a) => {
+  const counts = await call('getUnreadCounts', { roomId: 'room-1' });
+  const random = counts.find(c => c.topic === 'random');
+  a.equal(random.unread, 1, 'random topic still has 1 unread');
+});
+
+// ============================================================
+// Search
+// ============================================================
+
+t.test('search: finds messages by substring', async (a) => {
+  const results = await call('searchMessages', { roomId: 'room-1', query: 'Hello' });
+  a.equal(results.length, 1);
+  a.equal(results[0].id, 'msg-1');
+});
+
+t.test('search: limit is respected', async (a) => {
+  const results = await call('searchMessages', { roomId: 'room-1', query: 'e', limit: 1 });
+  a.equal(results.length, 1);
+});
+
+t.test('search: no results for non-matching query', async (a) => {
+  const results = await call('searchMessages', { roomId: 'room-1', query: 'zzzznotfound' });
+  a.deepEqual(results, []);
+});
+
+// ============================================================
+// Export / Import
+// ============================================================
+
+t.test('export: returns valid export format', async (a) => {
+  const data = await call('exportRoom', { roomId: 'room-1' });
+  a.equal(data.weft_version, 1);
+  a.equal(data.format, 'weft-export-v1');
+  a.ok(data.exported_at, 'has timestamp');
+  a.equal(data.room.id, 'room-1');
+  a.equal(data.room.name, 'Test Room');
+  a.equal(data.members.length, 2);
+  a.equal(data.messages.length, 3, '3 messages in room-1');
+});
+
+t.test('export: includes dht_key for DHT rooms', async (a) => {
+  const data = await call('exportRoom', { roomId: 'room-2' });
+  a.equal(data.room.dht_key, 'VLD0:dht999');
+});
+
+t.test('import: round-trip preserves data', async (a) => {
+  const exported = await call('exportRoom', { roomId: 'room-1' });
+  // Re-import same room (messages reference room-1 as room_id)
+  const result = await call('importRoom', { data: exported });
+  a.equal(result.roomId, 'room-1');
+
+  const room = await call('getRoom', { roomId: 'room-1' });
+  a.equal(room.name, 'Test Room');
+  const msgs = await call('getMessages', { roomId: 'room-1', topic: 'general' });
+  a.equal(msgs.length, 2);
+});
+
+t.test('import: idempotent (no duplicates on re-import)', async (a) => {
+  const exported = await call('exportRoom', { roomId: 'room-1' });
+  // Import again — INSERT OR IGNORE means no duplicates
+  await call('importRoom', { data: exported });
+  const msgs = await call('getMessages', { roomId: 'room-1', topic: 'general' });
+  a.equal(msgs.length, 2, 'still 2 messages after re-import');
+});
+
+t.test('export: returns null for nonexistent room', async (a) => {
+  const data = await call('exportRoom', { roomId: 'nonexistent' });
+  a.equal(data, null);
+});
+
+// ============================================================
+// Sync Primitives (cr-sqlite CRDT)
+// ============================================================
+
+t.test('sync: getDbVersion returns positive integer', async (a) => {
+  const v = await call('getDbVersion');
+  a.ok(v > 0, `db version ${v} > 0`);
+});
+
+t.test('sync: getChanges returns changesets', async (a) => {
+  const changes = await call('getChanges', { sinceVersion: 0 });
+  a.ok(changes.length > 0, 'has changes');
+  // Each change is an array of 9 values
+  a.equal(changes[0].length, 9, 'changeset has 9 columns');
+});
+
+t.test('sync: getChanges since high version returns empty', async (a) => {
+  const changes = await call('getChanges', { sinceVersion: 999999 });
+  a.deepEqual(changes, []);
+});
+
+t.test('sync: getChanges limit is respected', async (a) => {
+  const all = await call('getChanges', { sinceVersion: 0 });
+  const limited = await call('getChanges', { sinceVersion: 0, limit: 2 });
+  a.equal(limited.length, 2, 'limited to 2');
+  a.ok(all.length > 2, 'all has more than 2');
+});
+
+t.test('sync: db version increases after mutation', async (a) => {
+  const v1 = await call('getDbVersion');
+  await call('postMessage', {
+    id: 'msg-sync-test', roomId: 'room-1', topic: 'sync',
+    senderKey: 'VLD0:testkey2', content: 'sync test'
+  });
+  const v2 = await call('getDbVersion');
+  a.ok(v2 > v1, `version increased: ${v1} → ${v2}`);
+});
+
+// ============================================================
+
+await t.end();
+</script>
+</body>
+</html>
