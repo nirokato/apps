@@ -4,6 +4,14 @@ import { ulid } from './ulid.js';
 import { renderApp } from './ui.js';
 import { exportToFile, importFromFile } from './export.js';
 
+// --- Debug logger (writes to in-app debug panel + console) ---
+const log = {
+  info: (...args) => window.weftDebug?.log('info', ...args),
+  warn: (...args) => window.weftDebug?.log('warn', ...args),
+  error: (...args) => window.weftDebug?.log('error', ...args),
+  ok: (...args) => window.weftDebug?.log('ok', ...args),
+};
+
 // --- DB Worker interface ---
 
 class DB {
@@ -92,7 +100,7 @@ class Veilid {
       else p.resolve(result);
     };
     this.worker.onerror = (e) => {
-      console.error('Veilid worker error:', e);
+      log.error('Veilid worker error:', e);
     };
   }
 
@@ -233,7 +241,7 @@ async function broadcastToPeers(envelope) {
     try {
       await sendToPeer(routeBlob, data);
     } catch (e) {
-      console.warn(`[P2P] Failed to send to ${peerKey.slice(0, 16)}:`, e.message);
+      log.warn(`[P2P] Failed to send to ${peerKey.slice(0, 16)}:`, e.message);
       // Route may be stale — remove it
       delete state.peerRoutes[peerKey];
       setState({ onlinePeers: Object.keys(state.peerRoutes).length });
@@ -249,6 +257,7 @@ function handleVeilidUpdate(update) {
   // Attachment state changes
   if (update.kind === 'Attachment') {
     const attachState = update.state;
+    log.info('[Veilid] Attachment:', attachState);
     if (attachState === 'AttachedGood' || attachState === 'AttachedStrong' ||
         attachState === 'FullyAttached' || attachState === 'OverAttached') {
       setState({ veilidState: 'connected' });
@@ -283,14 +292,14 @@ async function setupLocalRoute() {
   try {
     const route = await veilid.createPrivateRoute();
     setState({ localRoute: route });
-    console.log('[P2P] Local route created');
+    log.info('[P2P] Local route created');
 
     // If we're in a room with a DHT key, publish our route
     if (state.currentRoom?.dht_key) {
       publishPresence();
     }
   } catch (e) {
-    console.warn('[P2P] Failed to create local route:', e.message);
+    log.warn('[P2P] Failed to create local route:', e.message);
   }
 }
 
@@ -317,9 +326,9 @@ async function publishPresence() {
       last_seen: new Date().toISOString(),
       db_version: await db.getDbVersion(),
     });
-    console.log('[P2P] Presence published to DHT');
+    log.info('[P2P] Presence published to DHT');
   } catch (e) {
-    console.warn('[P2P] Failed to publish presence:', e.message);
+    log.warn('[P2P] Failed to publish presence:', e.message);
   }
 }
 
@@ -327,7 +336,7 @@ async function publishPresence() {
 async function handleAppMessage(update) {
   try {
     const envelope = decodeEnvelope(update.message);
-    console.log('[P2P] Received:', envelope.type, 'from', (envelope.senderKey || '').slice(0, 16));
+    log.info('[P2P] Received:', envelope.type, 'from', (envelope.senderKey || '').slice(0, 16));
 
     switch (envelope.type) {
       case 'chat_message':
@@ -346,10 +355,10 @@ async function handleAppMessage(update) {
         await handleSyncResponse(envelope);
         break;
       default:
-        console.log('[P2P] Unknown message type:', envelope.type);
+        log.info('[P2P] Unknown message type:', envelope.type);
     }
   } catch (e) {
-    console.warn('[P2P] Failed to handle AppMessage:', e.message);
+    log.warn('[P2P] Failed to handle AppMessage:', e.message);
   }
 }
 
@@ -368,7 +377,7 @@ async function handleChatMessage(envelope) {
     });
   } catch (e) {
     // Likely duplicate — ignore
-    if (!e.message.includes('UNIQUE')) console.warn('[P2P] Insert error:', e.message);
+    if (!e.message.includes('UNIQUE')) log.warn('[P2P] Insert error:', e.message);
     return;
   }
 
@@ -420,11 +429,11 @@ async function handleJoinMessage(envelope) {
     try {
       await sendToPeer(routeBlob, encodeEnvelope(welcomeEnvelope));
     } catch (e) {
-      console.warn('[P2P] Failed to send welcome:', e.message);
+      log.warn('[P2P] Failed to send welcome:', e.message);
     }
   }
 
-  console.log('[P2P] Peer joined:', senderKey.slice(0, 16), displayName);
+  log.info('[P2P] Peer joined:', senderKey.slice(0, 16), displayName);
 }
 
 // Handle welcome response — room owner acknowledged our join
@@ -444,29 +453,29 @@ async function handleWelcomeMessage(envelope) {
     }
   }
 
-  console.log('[P2P] Welcome from:', senderKey.slice(0, 16), displayName);
+  log.info('[P2P] Welcome from:', senderKey.slice(0, 16), displayName);
 }
 
 async function handleAppCall(update) {
-  console.log('[Veilid] AppCall received:', update);
+  log.info('[Veilid] AppCall received:', update);
   // Phase 4: handle sync requests via AppCall
 }
 
 async function handleValueChange(update) {
-  console.log('[Veilid] ValueChange:', update);
+  log.info('[Veilid] ValueChange:', update);
   // Future: handle presence updates from DHT watch
 }
 
 // Handle sync request (Phase 4 — basic implementation)
 async function handleSyncRequest(envelope) {
   // Future: send cr-sqlite changesets back
-  console.log('[P2P] Sync request from:', envelope.senderKey?.slice(0, 16));
+  log.info('[P2P] Sync request from:', envelope.senderKey?.slice(0, 16));
 }
 
 // Handle sync response (Phase 4 — basic implementation)
 async function handleSyncResponse(envelope) {
   // Future: apply cr-sqlite changesets
-  console.log('[P2P] Sync response, changes:', envelope.changes?.length);
+  log.info('[P2P] Sync response, changes:', envelope.changes?.length);
 }
 
 // --- Handlers (passed to UI) ---
@@ -483,9 +492,9 @@ const handlers = {
           ownerKey = dht.ownerKey;
           ownerSecret = dht.ownerSecret;
           encryptionKey = dht.encryptionKey;
-          console.log('[Veilid] DHT record created for room:', dhtKey);
+          log.info('[Veilid] DHT record created for room:', dhtKey);
         } catch (e) {
-          console.warn('Failed to create DHT record, room will be local-only:', e);
+          log.warn('Failed to create DHT record, room will be local-only:', e);
         }
       }
 
@@ -556,18 +565,18 @@ const handlers = {
               roomId: room.id,
             };
             await sendToPeer(presence.route_blob, encodeEnvelope(joinEnvelope));
-            console.log('[P2P] Join message sent to room creator');
+            log.info('[P2P] Join message sent to room creator');
           }
         }
       } catch (e) {
-        console.warn('[P2P] Could not read creator presence:', e.message);
+        log.warn('[P2P] Could not read creator presence:', e.message);
       }
 
       // Watch the DHT record for changes
       try {
         await veilid.watchRoom(dhtKey.trim());
       } catch (e) {
-        console.warn('[P2P] Failed to watch room DHT:', e.message);
+        log.warn('[P2P] Failed to watch room DHT:', e.message);
       }
 
       const rooms = await db.getRooms();
@@ -793,9 +802,11 @@ const handlers = {
 
 async function boot() {
   try {
+    log.info('Boot: initializing DB worker...');
     // 1. Initialize DB
     db = new DB();
     await db.init();
+    log.ok('Boot: DB initialized');
 
     // 2. Load or create identity
     let identity = await db.getIdentity();
@@ -823,9 +834,11 @@ async function boot() {
 
 async function bootVeilid() {
   try {
+    log.info('Veilid: loading WASM...');
     setState({ veilidState: 'loading' });
     veilid = new Veilid(handleVeilidUpdate);
     await veilid.init(BOOTSTRAP_URL);
+    log.ok('Veilid: core started, attaching to network...');
     setState({ veilidState: 'connecting' });
 
     // Generate Veilid identity if we're still using a LOCAL: placeholder
@@ -836,11 +849,11 @@ async function bootVeilid() {
         const newIdentity = await db.createIdentity(kp.publicKey, state.identity.display_name);
         setState({ identity: newIdentity });
       } catch (e) {
-        console.warn('Failed to generate Veilid keypair, keeping local identity:', e);
+        log.warn('Failed to generate Veilid keypair, keeping local identity:', e);
       }
     }
   } catch (e) {
-    console.error('Veilid init failed:', e);
+    log.error('Veilid init failed:', e);
     setState({
       veilidState: 'error',
       veilidError: e.message || 'Failed to connect to Veilid network',

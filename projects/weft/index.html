@@ -571,6 +571,59 @@
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
 
+    /* === Debug log panel === */
+    .debug-panel {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      max-height: 40vh;
+      background: #0a0a08;
+      border-top: 2px solid var(--accent);
+      overflow-y: auto;
+      z-index: 200;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      line-height: 1.4;
+      padding: 0.5rem;
+      display: none;
+    }
+
+    .debug-panel.visible { display: block; }
+
+    .debug-panel .log-entry {
+      padding: 0.15rem 0.25rem;
+      border-bottom: 1px solid rgba(42, 42, 36, 0.3);
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .debug-panel .log-time { color: var(--text-secondary); }
+    .debug-panel .log-info { color: var(--text); }
+    .debug-panel .log-warn { color: var(--accent); }
+    .debug-panel .log-error { color: var(--error); }
+    .debug-panel .log-ok { color: var(--success); }
+
+    .debug-toggle {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.2rem 0.4rem;
+    }
+    .debug-toggle:hover { color: var(--accent); }
+
+    .peer-count {
+      font-size: 0.7rem;
+      font-family: var(--mono);
+      color: var(--accent);
+      padding: 0.15rem 0.4rem;
+      background: rgba(196, 162, 78, 0.1);
+      border-radius: 4px;
+    }
+
     /* === Responsive === */
     @media (max-width: 600px) {
       .new-topic-bar {
@@ -587,6 +640,38 @@
 </head>
 <body>
   <div id="app"></div>
+  <div id="debug-panel" class="debug-panel"></div>
+  <script>
+    // Debug logger — available globally, toggleable via UI
+    window.weftDebug = {
+      entries: [],
+      visible: false,
+      log(level, ...args) {
+        const ts = new Date().toISOString().slice(11, 23);
+        const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+        this.entries.push({ ts, level, msg });
+        if (this.entries.length > 500) this.entries.shift();
+        this.render();
+        // Also log to console
+        const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
+        fn(`[weft:${level}]`, ...args);
+      },
+      render() {
+        const panel = document.getElementById('debug-panel');
+        if (!panel || !this.visible) return;
+        panel.innerHTML = this.entries.map(e =>
+          `<div class="log-entry"><span class="log-time">${e.ts}</span> <span class="log-${e.level}">${e.msg}</span></div>`
+        ).join('');
+        panel.scrollTop = panel.scrollHeight;
+      },
+      toggle() {
+        this.visible = !this.visible;
+        const panel = document.getElementById('debug-panel');
+        if (panel) panel.classList.toggle('visible', this.visible);
+        if (this.visible) this.render();
+      }
+    };
+  </script>
   <script type="module" src="./src/app.js"></script>
 </body>
 </html>
