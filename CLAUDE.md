@@ -36,6 +36,7 @@ The deploy matrix is auto-discovered from the `projects/` directory — **no wor
 | homepage | `projects/homepage/` | `apps.andymolenda.com` | Landing page and project directory |
 | clock | `projects/clock/` | `clock.apps.andymolenda.com` | World clock across timezones |
 | weft | `projects/weft/` | `weft.apps.andymolenda.com` | Local-first topic-threaded P2P chat on Veilid + cr-sqlite |
+| peer-drop | `projects/peer-drop/` | `peer-drop.apps.andymolenda.com` | P2P file and text sharing between devices via WebRTC |
 
 ## Design system
 
