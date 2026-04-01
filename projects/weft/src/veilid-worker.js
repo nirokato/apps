@@ -184,7 +184,7 @@ async function releaseRoute({ routeId }) {
 async function createDHTRecord({ schema, owner }) {
   const kind = veilidCrypto.CRYPTO_KIND_VLD0;
   const ownerKp = owner ? parseKeyPair(owner) : undefined;
-  const desc = await routingCtx.createDHTRecord(kind, schema || { DFLT: { o_cnt: 1 } }, ownerKp);
+  const desc = await routingCtx.createDHTRecord(kind, schema || { DFLT: { oCnt: 1 } }, ownerKp);
   return {
     key: desc.key.toString(),
     owner: desc.owner.toString(),
@@ -251,14 +251,14 @@ async function createRoomDHT({ roomName }) {
 
   // Create SMPL schema: owner gets 1 subkey (metadata), plus 1 member subkey for creator
   // Veilid WASM deserializes DHTSchema as a Rust tagged enum (externally tagged serde format)
-  // Member keys must be MemberId (typed key), not bare PublicKey strings
+  // Member keys must be BareMemberId WASM objects (use memberId.value)
   const kind = veilidCrypto.CRYPTO_KIND_VLD0;
   const memberId = veilidClient.generateMemberId(ownerPublicKey);
   const schema = {
     SMPL: {
-      o_cnt: 1,  // subkey 0: room metadata (owner-writable)
+      oCnt: 1,  // subkey 0: room metadata (owner-writable)
       members: [
-        { m_key: memberId.toString(), m_cnt: 1 },  // subkey 1: creator's presence
+        { mKey: memberId.value, mCnt: 1 },  // subkey 1: creator's presence
       ],
     },
   };
