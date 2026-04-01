@@ -15,8 +15,9 @@
       color: #e8e4d4;
       min-height: 100vh;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
+      padding-top: 10vh;
     }
     .container { max-width: 600px; width: 100%; padding: 2rem; }
     h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
@@ -417,10 +418,21 @@
     }
 
     function copyRoomUrl() {
-      navigator.clipboard.writeText(getRoomUrl()).then(() => {
+      const url = getRoomUrl();
+      navigator.clipboard.writeText(url).then(() => {
         const btn = document.getElementById('copy-btn');
         btn.classList.add('copy-tooltip', 'show');
         setTimeout(() => btn.classList.remove('show'), 1500);
+      }).catch(() => {
+        // Fallback for non-secure contexts
+        const ta = document.createElement('textarea');
+        ta.value = url;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
       });
     }
 
@@ -447,7 +459,9 @@
     // ── File Transfer: Sending ────────────────────────────────
     function queueFiles(files) {
       if (!conn || conn.open !== true) return;
-      outgoingQueue.push(...Array.from(files));
+      const valid = Array.from(files).filter(f => f.size > 0);
+      if (valid.length === 0) return;
+      outgoingQueue.push(...valid);
       if (!sending) processQueue();
     }
 
@@ -455,7 +469,12 @@
       if (outgoingQueue.length === 0) { sending = false; return; }
       sending = true;
       const file = outgoingQueue.shift();
-      await sendFile(file);
+      try {
+        await sendFile(file);
+      } catch (err) {
+        console.error('Transfer failed:', err);
+        showError('Transfer failed: ' + (err.message || 'connection lost'));
+      }
       processQueue();
     }
 
@@ -527,8 +546,15 @@
         `);
 
         // Backpressure: pause if buffer is large
-        if (conn.dataChannel && conn.dataChannel.bufferedAmount > 1024 * 1024) {
-          await new Promise(r => setTimeout(r, 50));
+        const dc = conn.dataChannel || (conn._dc);
+        if (dc && dc.bufferedAmount > 1024 * 1024) {
+          await new Promise(r => {
+            const check = () => {
+              if (!dc || dc.bufferedAmount < 512 * 1024) r();
+              else setTimeout(check, 50);
+            };
+            setTimeout(check, 50);
+          });
         }
       }
 
@@ -553,43 +579,80 @@
     }
 
     // ── File Transfer: Receiving ──────────────────────────────
+    const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB safety limit
+
     function handleFileOffer(msg) {
-      const { id, name, size, mimeType, totalChunks } = msg;
+      const id = sanitizeId(msg.id);
+      const name = String(msg.name || 'unnamed');
+      const size = Number(msg.size) || 0;
+      const mimeType = String(msg.mimeType || 'application/octet-stream');
+      const totalChunks = Number(msg.totalChunks) || 0;
+
+      if (size > MAX_FILE_SIZE || totalChunks > Math.ceil(MAX_FILE_SIZE / CHUNK_SIZE) || size <= 0) {
+        conn.send({ type: 'file-decline', id });
+        return;
+      }
+
       incomingTransfers[id] = { name, size, mimeType, totalChunks, chunks: new Array(totalChunks), received: 0, startTime: null };
 
-      addActivityCard('recv-' + id, `
-        <div class="accept-prompt">
-          <div class="accept-info">
-            <div class="transfer-name">${escapeHtml(name)}</div>
-            <div class="transfer-size">${formatSize(size)}</div>
-          </div>
-          <div class="accept-actions">
-            <button class="btn btn-primary" onclick="respondToOffer('${id}', true)">Accept</button>
-            <button class="btn btn-decline" onclick="respondToOffer('${id}', false)">Decline</button>
-          </div>
-        </div>
-      `);
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.id = 'activity-recv-' + id;
+
+      const prompt = document.createElement('div');
+      prompt.className = 'accept-prompt';
+
+      const info = document.createElement('div');
+      info.className = 'accept-info';
+      const nameEl = document.createElement('div');
+      nameEl.className = 'transfer-name';
+      nameEl.textContent = name;
+      const sizeEl = document.createElement('div');
+      sizeEl.className = 'transfer-size';
+      sizeEl.textContent = formatSize(size);
+      info.appendChild(nameEl);
+      info.appendChild(sizeEl);
+
+      const actions = document.createElement('div');
+      actions.className = 'accept-actions';
+      const acceptBtn = document.createElement('button');
+      acceptBtn.className = 'btn btn-primary';
+      acceptBtn.textContent = 'Accept';
+      acceptBtn.addEventListener('click', () => respondToOffer(id, true));
+      const declineBtn = document.createElement('button');
+      declineBtn.className = 'btn btn-decline';
+      declineBtn.textContent = 'Decline';
+      declineBtn.addEventListener('click', () => respondToOffer(id, false));
+      actions.appendChild(acceptBtn);
+      actions.appendChild(declineBtn);
+
+      prompt.appendChild(info);
+      prompt.appendChild(actions);
+      card.appendChild(prompt);
+      $activityFeed.prepend(card);
     }
 
     function respondToOffer(id, accept) {
-      conn.send({ type: accept ? 'file-accept' : 'file-decline', id });
+      const safeId = sanitizeId(id);
+      conn.send({ type: accept ? 'file-accept' : 'file-decline', id: safeId });
       if (!accept) {
-        delete incomingTransfers[id];
-        updateActivityCard('recv-' + id, `
+        delete incomingTransfers[safeId];
+        updateActivityCard('recv-' + safeId, `
           <div class="transfer-item">
             <div class="transfer-header">
               <span class="transfer-name">File declined</span>
             </div>
           </div>
         `);
-        setTimeout(() => removeActivityCard('recv-' + id), 2000);
+        setTimeout(() => removeActivityCard('recv-' + safeId), 2000);
       } else {
-        incomingTransfers[id].startTime = Date.now();
-        updateActivityCard('recv-' + id, `
+        const transfer = incomingTransfers[safeId];
+        transfer.startTime = Date.now();
+        updateActivityCard('recv-' + safeId, `
           <div class="transfer-item">
             <div class="transfer-header">
-              <span class="transfer-name">${escapeHtml(incomingTransfers[id].name)}</span>
-              <span class="transfer-size">0 B / ${formatSize(incomingTransfers[id].size)}</span>
+              <span class="transfer-name">${escapeHtml(transfer.name)}</span>
+              <span class="transfer-size">0 B / ${formatSize(transfer.size)}</span>
             </div>
             <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
             <div class="transfer-stats"><span>0%</span><span></span></div>
@@ -599,10 +662,14 @@
     }
 
     function handleFileChunk(msg) {
-      const transfer = incomingTransfers[msg.id];
+      const id = sanitizeId(msg.id);
+      const transfer = incomingTransfers[id];
       if (!transfer) return;
 
-      transfer.chunks[msg.index] = msg.data;
+      const index = Number(msg.index);
+      if (index < 0 || index >= transfer.totalChunks) return;
+
+      transfer.chunks[index] = msg.data;
       transfer.received++;
 
       const receivedBytes = Math.min(transfer.received * CHUNK_SIZE, transfer.size);
@@ -610,7 +677,7 @@
       const elapsed = (Date.now() - transfer.startTime) / 1000;
       const speed = elapsed > 0 ? formatSize(receivedBytes / elapsed) + '/s' : '';
 
-      updateActivityCard('recv-' + msg.id, `
+      updateActivityCard('recv-' + id, `
         <div class="transfer-item">
           <div class="transfer-header">
             <span class="transfer-name">${escapeHtml(transfer.name)}</span>
@@ -623,7 +690,8 @@
     }
 
     function handleFileComplete(msg) {
-      const transfer = incomingTransfers[msg.id];
+      const id = sanitizeId(msg.id);
+      const transfer = incomingTransfers[id];
       if (!transfer) return;
 
       // Reassemble and download
@@ -637,7 +705,7 @@
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 10000);
 
-      updateActivityCard('recv-' + msg.id, `
+      updateActivityCard('recv-' + id, `
         <div class="transfer-item">
           <div class="transfer-header">
             <span class="transfer-name">${escapeHtml(transfer.name)}</span>
@@ -648,7 +716,7 @@
         </div>
       `);
 
-      delete incomingTransfers[msg.id];
+      delete incomingTransfers[id];
     }
 
     // ── Text Sharing ──────────────────────────────────────────
@@ -667,26 +735,57 @@
     function addTextMessage(text, direction) {
       const id = 'text-' + Date.now();
       const label = direction === 'sent' ? 'You sent' : 'Received';
-      const displayText = isUrl(text)
-        ? `<a href="${escapeHtml(text)}" target="_blank" rel="noopener">${escapeHtml(text)}</a>`
-        : escapeHtml(text);
 
-      addActivityCard(id, `
-        <div class="text-message">
-          <div class="text-content">
-            <div class="text-direction">${label}</div>
-            ${displayText}
-          </div>
-          <button class="btn" onclick="copyText(this, '${escapeAttr(text)}')">Copy</button>
-        </div>
-      `);
-    }
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.id = 'activity-' + id;
 
-    function copyText(btn, text) {
-      navigator.clipboard.writeText(text).then(() => {
-        btn.classList.add('copy-tooltip', 'show');
-        setTimeout(() => btn.classList.remove('show'), 1500);
+      const wrapper = document.createElement('div');
+      wrapper.className = 'text-message';
+
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'text-content';
+
+      const dirLabel = document.createElement('div');
+      dirLabel.className = 'text-direction';
+      dirLabel.textContent = label;
+      contentDiv.appendChild(dirLabel);
+
+      if (isUrl(text)) {
+        const link = document.createElement('a');
+        link.href = text;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.textContent = text;
+        contentDiv.appendChild(link);
+      } else {
+        contentDiv.appendChild(document.createTextNode(text));
+      }
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'btn';
+      copyBtn.textContent = 'Copy';
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(text).then(() => {
+          copyBtn.classList.add('copy-tooltip', 'show');
+          setTimeout(() => copyBtn.classList.remove('show'), 1500);
+        }).catch(() => {
+          // Fallback: select from a temporary textarea
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        });
       });
+
+      wrapper.appendChild(contentDiv);
+      wrapper.appendChild(copyBtn);
+      card.appendChild(wrapper);
+      $activityFeed.prepend(card);
     }
 
     function escapeHtml(str) {
@@ -695,8 +794,8 @@
       return div.innerHTML;
     }
 
-    function escapeAttr(str) {
-      return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    function sanitizeId(str) {
+      return String(str).replace(/[^a-zA-Z0-9_-]/g, '');
     }
 
     // ── Connection Handling ───────────────────────────────────
@@ -713,8 +812,8 @@
         if (!data || !data.type) return;
         switch (data.type) {
           case 'file-offer': handleFileOffer(data); break;
-          case 'file-accept': if (pendingResponses[data.id]) { pendingResponses[data.id](true); delete pendingResponses[data.id]; } break;
-          case 'file-decline': if (pendingResponses[data.id]) { pendingResponses[data.id](false); delete pendingResponses[data.id]; } break;
+          case 'file-accept': { const rid = sanitizeId(data.id); if (pendingResponses[rid]) { pendingResponses[rid](true); delete pendingResponses[rid]; } break; }
+          case 'file-decline': { const rid = sanitizeId(data.id); if (pendingResponses[rid]) { pendingResponses[rid](false); delete pendingResponses[rid]; } break; }
           case 'file-chunk': handleFileChunk(data); break;
           case 'file-complete': handleFileComplete(data); break;
           case 'text': handleTextMessage(data); break;
@@ -722,10 +821,14 @@
       });
 
       conn.on('close', () => {
-        setStatus('disconnected', 'Peer disconnected');
         conn = null;
-        // If joiner, try to reconnect
-        if (!isHost) {
+        if (isHost) {
+          setStatus('waiting', 'Peer disconnected. Waiting for new connection...');
+          $sendSection.classList.add('hidden');
+          $roomSection.classList.remove('hidden');
+        } else {
+          setStatus('disconnected', 'Peer disconnected. Reconnecting...');
+          $sendSection.classList.add('hidden');
           setTimeout(() => connectToHost(), 3000);
         }
       });
