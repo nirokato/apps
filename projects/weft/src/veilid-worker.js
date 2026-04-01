@@ -162,8 +162,13 @@ function setIdentity({ publicKey, secretKey }) {
 
 async function createPrivateRoute() {
   const routeBlob = await veilidClient.newPrivateRoute();
+  // json-camel-case: route_id → routeId
+  const rid = routeBlob.routeId || routeBlob.route_id;
+  const ridStr = rid ? rid.toString() : null;
+  // Cache our own route for loopback/self-reference
+  if (rid) importedRoutes.set(ridStr, rid);
   return {
-    routeId: routeBlob.route_id,
+    routeId: ridStr,
     blob: routeBlob.blob,
   };
 }
@@ -368,8 +373,14 @@ async function sendAppMessage({ target, message }) {
     : new Uint8Array(message);
   // target can be a routeId string (look up cached WASM object) or passed directly
   const routeId = typeof target === 'string' ? importedRoutes.get(target) : target;
-  if (!routeId) throw new Error('Unknown route: ' + target + '. Import the route first.');
-  await routingCtx.appMessage(routeId, msgBytes);
+  if (!routeId) {
+    console.error('[veilid-worker] sendAppMessage: unknown route:', target, 'cached routes:', [...importedRoutes.keys()]);
+    throw new Error('Unknown route: ' + target + '. Import the route first.');
+  }
+  // Target is a serde externally-tagged enum: { RouteId: routeId } or { NodeId: nodeId }
+  const target_enum = { RouteId: routeId };
+  console.log('[veilid-worker] sendAppMessage: wrapping RouteId in Target enum');
+  await routingCtx.appMessage(target_enum, msgBytes);
   return { ok: true };
 }
 
