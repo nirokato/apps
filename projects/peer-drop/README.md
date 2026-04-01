@@ -15,7 +15,7 @@ No accounts, no installs, no data stored anywhere. Close the tab and it's gone.
 
 ## Features
 
-- **File transfer** — drag-and-drop or file picker, with chunked transfer and progress bars
+- **File transfer** — drag-and-drop or file picker, with streamed chunked transfer and progress bars
 - **Text sharing** — paste a URL on your phone, it appears on your laptop instantly
 - **QR code pairing** — fastest way to connect phone to desktop
 - **Bidirectional** — either peer can send to the other
@@ -55,15 +55,19 @@ projects/peer-drop/
 
 ## Transfer protocol
 
-Files are chunked into 64KB `ArrayBuffer` slices and sent over a PeerJS `DataConnection`:
+Files are streamed in 64KB slices — neither sender nor receiver loads the entire file into memory:
 
 ```
 1. Sender → file-offer    { name, size, mimeType, totalChunks }
 2. Receiver → file-accept  or  file-decline
-3. Sender → file-chunk    { index, data }  ×N  (with backpressure)
+3. Sender → file-chunk    { index, data }  ×N  (stream-read via file.slice, with backpressure)
 4. Sender → file-complete
-5. Receiver assembles Blob, triggers download
+5. Receiver writes to disk (File System Access API) or assembles Blob (fallback)
 ```
+
+**Send side:** reads one 64KB slice at a time via `file.slice(start, end).arrayBuffer()` — constant memory regardless of file size.
+
+**Receive side:** on Chrome/Edge, uses the File System Access API (`showSaveFilePicker` + `createWritable`) to stream chunks directly to disk as they arrive. On Firefox/Safari (no FSAPI), falls back to accumulating chunks in memory and downloading via Blob URL.
 
 Text messages use a simple `{ type: "text", content: "..." }` envelope.
 
@@ -72,8 +76,8 @@ Text messages use a simple `{ type: "text", content: "..." }` envelope.
 - All peer-supplied data (transfer IDs, filenames, text) is sanitized before rendering
 - Text messages rendered via DOM API (`createElement`/`textContent`), not `innerHTML`
 - Transfer IDs validated against an alphanumeric allowlist
-- 500MB file size cap to prevent memory exhaustion
-- Chunk indices bounds-checked on receive
+- Streamed I/O prevents memory exhaustion for large files (no file size cap)
+- Chunk indices bounds-checked on receive; totalChunks validated against declared file size
 - No additional E2E encryption beyond WebRTC's built-in DTLS — suitable for trusted/casual use, not adversarial threat models
 
 ## Running locally

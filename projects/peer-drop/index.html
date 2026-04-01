@@ -517,19 +517,18 @@
         return;
       }
 
-      // Read and send chunks
-      const buffer = await file.arrayBuffer();
+      // Stream-read and send chunks (one slice at a time to avoid loading entire file)
       const startTime = Date.now();
 
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, buffer.byteLength);
-        const chunk = buffer.slice(start, end);
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunk = await file.slice(start, end).arrayBuffer();
 
         conn.send({ type: 'file-chunk', id, index: i, data: chunk });
 
         // Update progress
-        const sent = Math.min(end, file.size);
+        const sent = end;
         const pct = Math.round((sent / file.size) * 100);
         const elapsed = (Date.now() - startTime) / 1000;
         const speed = elapsed > 0 ? formatSize(sent / elapsed) + '/s' : '';
@@ -579,8 +578,6 @@
     }
 
     // ── File Transfer: Receiving ──────────────────────────────
-    const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB safety limit
-
     function handleFileOffer(msg) {
       const id = sanitizeId(msg.id);
       const name = String(msg.name || 'unnamed');
@@ -588,12 +585,12 @@
       const mimeType = String(msg.mimeType || 'application/octet-stream');
       const totalChunks = Number(msg.totalChunks) || 0;
 
-      if (size > MAX_FILE_SIZE || totalChunks > Math.ceil(MAX_FILE_SIZE / CHUNK_SIZE) || size <= 0) {
+      if (size <= 0 || totalChunks <= 0 || totalChunks > Math.ceil(size / CHUNK_SIZE) + 1) {
         conn.send({ type: 'file-decline', id });
         return;
       }
 
-      incomingTransfers[id] = { name, size, mimeType, totalChunks, chunks: new Array(totalChunks), received: 0, startTime: null };
+      incomingTransfers[id] = { name, size, mimeType, totalChunks, received: 0, startTime: null, writable: null, chunks: null };
 
       const card = document.createElement('div');
       card.className = 'card';
@@ -632,7 +629,7 @@
       $activityFeed.prepend(card);
     }
 
-    function respondToOffer(id, accept) {
+    async function respondToOffer(id, accept) {
       const safeId = sanitizeId(id);
       conn.send({ type: accept ? 'file-accept' : 'file-decline', id: safeId });
       if (!accept) {
@@ -648,6 +645,29 @@
       } else {
         const transfer = incomingTransfers[safeId];
         transfer.startTime = Date.now();
+
+        // Try File System Access API for streaming writes to disk
+        if (window.showSaveFilePicker) {
+          try {
+            const handle = await window.showSaveFilePicker({
+              suggestedName: transfer.name,
+              types: [{
+                description: 'File',
+                accept: { [transfer.mimeType]: ['.' + (transfer.name.split('.').pop() || 'bin')] }
+              }]
+            });
+            transfer.writable = await handle.createWritable();
+          } catch (e) {
+            // User cancelled or API error — fall back to in-memory
+            transfer.writable = null;
+          }
+        }
+
+        // Fallback: accumulate chunks in memory
+        if (!transfer.writable) {
+          transfer.chunks = new Array(transfer.totalChunks);
+        }
+
         updateActivityCard('recv-' + safeId, `
           <div class="transfer-item">
             <div class="transfer-header">
@@ -669,7 +689,12 @@
       const index = Number(msg.index);
       if (index < 0 || index >= transfer.totalChunks) return;
 
-      transfer.chunks[index] = msg.data;
+      // Stream to disk or buffer in memory
+      if (transfer.writable) {
+        transfer.writable.write(new Blob([msg.data]));
+      } else if (transfer.chunks) {
+        transfer.chunks[index] = msg.data;
+      }
       transfer.received++;
 
       const receivedBytes = Math.min(transfer.received * CHUNK_SIZE, transfer.size);
@@ -689,21 +714,25 @@
       `);
     }
 
-    function handleFileComplete(msg) {
+    async function handleFileComplete(msg) {
       const id = sanitizeId(msg.id);
       const transfer = incomingTransfers[id];
       if (!transfer) return;
 
-      // Reassemble and download
-      const blob = new Blob(transfer.chunks, { type: transfer.mimeType });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = transfer.name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      // Finalize: close stream or assemble Blob
+      if (transfer.writable) {
+        await transfer.writable.close();
+      } else {
+        const blob = new Blob(transfer.chunks, { type: transfer.mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = transfer.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      }
 
       updateActivityCard('recv-' + id, `
         <div class="transfer-item">
