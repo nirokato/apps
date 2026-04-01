@@ -699,7 +699,8 @@ All `CLAUDE.md` updates have been applied:
 - [x] Veilid bootstraps via WSS proxy → FullyAttached / OverAttached
 - [x] cr-sqlite boots in browser, creates schema, persists to IndexedDB
 - [x] Create a room (generates DHT record + symmetric key) — live-tested, real DHT key on network
-- [ ] Join a room (from invite: DHT key + encryption key) — blocked by KeyPair parsing bug
+- [x] Join a room (open DHT record, read metadata) — live-tested
+- [ ] Real-time message delivery via AppMessage
 - [x] Post messages with a topic string
 - [x] View messages grouped by topic (topic-river layout)
 - [x] Topics sorted by most recent activity
@@ -810,8 +811,10 @@ Recommended order of implementation for Claude Code Web:
     - Fixed DHTSchema format: externally-tagged Rust enum (`{SMPL: {...}}` not `{kind: 'SMPL', ...}`)
     - Fixed camelCase field names: `oCnt`, `mKey`, `mCnt` (WASM built with `json-camel-case`)
     - Fixed member key type: pass `BareMemberId` WASM object, not stringified key
-19. Implement DHT record opening for room joins ← **NEXT** (KeyPair parsing bug: "input has incorrect parts")
-20. Implement AppMessage send/receive for real-time messages
+19. ~~Implement DHT record opening for room joins (live-tested: all 6 DHT tests pass)~~
+    - Fixed KeyPair parsing: accept separate ownerKey/ownerSecret, construct via `KeyPair.newFromParts()`
+    - API changed: `openRoomDHT({ dhtKey, ownerKey, ownerSecret })` instead of `ownerKeyPair` string
+20. Implement AppMessage send/receive for real-time messages ← **NEXT**
 21. Implement presence updates in DHT subkeys
 22. Test: two browser tabs can exchange messages in real-time
 
