@@ -20,14 +20,17 @@ Messages are organized into **rooms** containing **topics** (threads). Each topi
 - Post and read messages with cr-sqlite persistence
 - Search messages across topics
 - Export/import rooms as JSON for backup or sharing
-- Veilid network attachment, identity generation, DHT record creation
-- DHT-backed rooms with symmetric encryption keys
-- Room joining via DHT key invite (paste or copy)
+- Veilid WASM boots with WSS support (compiled with `enable-protocol-wss`)
+- Bootstraps to Veilid network via WSS proxy (Cloudflare Tunnel → nginx → official bootstrap)
+- Network attachment: AttachedWeak / PublicInternet ready
+- Identity generation and persistence
+- DHT record creation, room joining via DHT key invite
 - Real-time P2P message delivery via Veilid AppMessage
 - Peer route exchange (join/welcome handshake)
 - CRDT merge: independent databases converge via `crsql_changes`
 
 **What's next:**
+- DHT record creation for rooms (Phase 3, step 18)
 - End-to-end encryption (AEAD primitives are wired, not yet applied to messages)
 - Presence indicators via DHT subkeys
 - cr-sqlite changeset sync via Veilid AppCall (reliable catch-up)
@@ -51,8 +54,9 @@ lib/                       Vendored cr-sqlite dependencies
   xplat-api/               @vlcn.io/xplat-api v0.15.0
   async-mutex/             async-mutex v0.4.1
 wasm/veilid/
-  veilid_wasm.js           Veilid WASM loader (~310 KB)
-  veilid_wasm_bg.wasm      Compiled Veilid binary (~9.5 MB)
+  veilid_wasm.js           Veilid WASM loader (~310 KB, patched for Worker compat)
+  veilid_wasm_bg.wasm      Compiled Veilid binary (~9.5 MB, built with enable-protocol-wss)
+test-headless.mjs          Headless Chromium test script (console capture via --enable-logging)
 tests/
   run.js                   Playwright test runner (auto-discovers *.test.html)
   harness.js               Minimal TAP assertion library
@@ -105,6 +109,6 @@ Open `test.html` in a browser or run `node run-tests.js`. Validates Veilid WASM 
 - **No bundler, no npm** — native ES modules, CDN imports
 - **lit-html** for UI rendering
 - **cr-sqlite** (`@vlcn.io/crsqlite-wasm`) for CRDT-enabled local persistence
-- **Veilid WASM** for P2P networking, DHT, and cryptography
+- **Veilid WASM** v0.5.3 for P2P networking, DHT, and cryptography (built with `enable-protocol-wss`, Worker-patched)
 - **ULID** for lexicographically sortable message IDs
 - **Playwright** for automated browser-based testing
