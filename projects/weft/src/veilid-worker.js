@@ -296,9 +296,14 @@ async function createRoomDHT({ roomName }) {
 }
 
 // Opens an existing room's DHT record and reads metadata
-async function openRoomDHT({ dhtKey, ownerKeyPair }) {
+async function openRoomDHT({ dhtKey, ownerKey, ownerSecret }) {
   const recordKey = parseRecordKey(dhtKey);
-  const kp = ownerKeyPair ? parseKeyPair(ownerKeyPair) : null;
+  let kp = null;
+  if (ownerKey && ownerSecret) {
+    const pk = PublicKey.parse(ownerKey);
+    const sk = SecretKey.parse(ownerSecret);
+    kp = KeyPair.newFromParts(pk, sk.value);
+  }
   const desc = await routingCtx.openDHTRecord(recordKey, kp);
 
   // Read room metadata from subkey 0

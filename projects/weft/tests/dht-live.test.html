@@ -134,8 +134,7 @@ t.test('openRoomDHT: re-open and read back metadata', async (a) => {
   // Close first to re-open cleanly
   await call('closeDHTRecord', { key: dhtResult.dhtKey });
 
-  const ownerKeyPair = `${dhtResult.ownerKey}:${dhtResult.ownerSecret}`;
-  const room = await call('openRoomDHT', { dhtKey: dhtResult.dhtKey, ownerKeyPair });
+  const room = await call('openRoomDHT', { dhtKey: dhtResult.dhtKey, ownerKey: dhtResult.ownerKey, ownerSecret: dhtResult.ownerSecret });
   a.ok(room.key, 'key is set');
   a.ok(room.metadata, 'metadata was read back');
   a.equal(room.metadata.name, 'test-room', 'room name matches');
