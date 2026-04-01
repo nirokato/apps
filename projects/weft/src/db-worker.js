@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS rooms (
     dht_key TEXT NOT NULL DEFAULT '',
     owner_key TEXT NOT NULL DEFAULT '',
     owner_secret TEXT NOT NULL DEFAULT '',
-    encryption_key TEXT NOT NULL DEFAULT ''
+    encryption_key TEXT NOT NULL DEFAULT '',
+    my_subkey INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS members (
@@ -109,10 +110,10 @@ const actions = {
     return db.execO('SELECT * FROM rooms ORDER BY created_at DESC');
   },
 
-  async createRoom({ id, name, createdBy, dhtKey, ownerKey, ownerSecret, encryptionKey }) {
+  async createRoom({ id, name, createdBy, dhtKey, ownerKey, ownerSecret, encryptionKey, mySubkey }) {
     await db.exec(
-      'INSERT INTO rooms (id, name, created_by, dht_key, owner_key, owner_secret, encryption_key) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, name, createdBy, dhtKey || '', ownerKey || '', ownerSecret || '', encryptionKey || '']
+      'INSERT INTO rooms (id, name, created_by, dht_key, owner_key, owner_secret, encryption_key, my_subkey) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, name, createdBy, dhtKey || '', ownerKey || '', ownerSecret || '', encryptionKey || '', mySubkey != null ? mySubkey : 1]
     );
     await db.exec(
       'INSERT INTO members (room_id, public_key, display_name, role) VALUES (?, ?, ?, ?)',
