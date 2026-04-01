@@ -135,8 +135,8 @@ class Veilid {
   createRoomDHT(roomName) {
     return this.call('createRoomDHT', { roomName });
   }
-  openRoomDHT(dhtKey, ownerKeyPair) {
-    return this.call('openRoomDHT', { dhtKey, ownerKeyPair });
+  openRoomDHT(dhtKey, ownerKey, ownerSecret) {
+    return this.call('openRoomDHT', { dhtKey, ownerKey, ownerSecret });
   }
   updateRoomMetadata(dhtKey, metadata) {
     return this.call('updateRoomMetadata', { dhtKey, metadata });
@@ -313,12 +313,12 @@ async function publishPresence() {
   if (!veilid || state.veilidState !== 'connected') return;
 
   try {
-    const ownerKp = state.currentRoom.owner_key && state.currentRoom.owner_secret
-      ? `${state.currentRoom.owner_key}:${state.currentRoom.owner_secret}`
-      : null;
-
     // Open DHT record (needed before writing)
-    await veilid.openRoomDHT(state.currentRoom.dht_key, ownerKp);
+    await veilid.openRoomDHT(
+      state.currentRoom.dht_key,
+      state.currentRoom.owner_key || null,
+      state.currentRoom.owner_secret || null
+    );
 
     // Write presence to subkey 1 (owner's presence subkey)
     await veilid.writePresence(state.currentRoom.dht_key, 1, {
