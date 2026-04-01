@@ -16,6 +16,9 @@ No accounts, no installs, no data stored anywhere. Close the tab and it's gone.
 ## Features
 
 - **File transfer** — drag-and-drop or file picker, with streamed chunked transfer and progress bars
+- **Multi-channel** — 4 parallel WebRTC data channels for higher throughput (~4x vs single channel)
+- **Resumable transfers** — if the connection drops mid-transfer, reconnects and resumes from where it left off
+- **Screen Wake Lock** — keeps devices awake during transfers (desktop and mobile)
 - **Text sharing** — paste a URL on your phone, it appears on your laptop instantly
 - **QR code pairing** — fastest way to connect phone to desktop
 - **Bidirectional** — either peer can send to the other
@@ -55,19 +58,21 @@ projects/peer-drop/
 
 ## Transfer protocol
 
-Files are streamed in 64KB slices — neither sender nor receiver loads the entire file into memory:
+Files are streamed in 256KB slices across 4 parallel data channels:
 
 ```
-1. Sender → file-offer    { name, size, mimeType, totalChunks }
-2. Receiver → file-accept  or  file-decline
-3. Sender → file-chunk    { index, data }  ×N  (stream-read via file.slice, with backpressure)
-4. Sender → file-complete
+1. Sender → file-offer     { name, size, mimeType, totalChunks }     (control channel)
+2. Receiver → file-accept   or  file-decline                         (control channel)
+3. Sender → file-chunk      { index, data }  ×N  round-robin across  (transfer channels)
+4. Sender → file-complete                                             (control channel)
 5. Receiver writes to disk (File System Access API) or assembles Blob (fallback)
 ```
 
-**Send side:** reads one 64KB slice at a time via `file.slice(start, end).arrayBuffer()` — constant memory regardless of file size.
+On reconnect, the receiver sends `transfer-resume` with received chunk counts, and the sender resumes from where it left off.
 
-**Receive side:** on Chrome/Edge, uses the File System Access API (`showSaveFilePicker` + `createWritable`) to stream chunks directly to disk as they arrive. On Firefox/Safari (no FSAPI), falls back to accumulating chunks in memory and downloading via Blob URL.
+**Send side:** reads one 256KB slice at a time via `file.slice()` — constant memory. Chunks are distributed round-robin across 4 transfer channels with per-channel backpressure via `bufferedAmountLowThreshold`.
+
+**Receive side:** on Chrome/Edge, streams chunks to disk via File System Access API with an ordered write buffer for out-of-order multi-channel delivery. On Firefox/Safari, falls back to in-memory Blob accumulation.
 
 Text messages use a simple `{ type: "text", content: "..." }` envelope.
 
@@ -94,6 +99,6 @@ Open `http://localhost:8000` — you'll need two devices or browser tabs to test
 ## Tech
 
 - **No bundler, no npm** — single `index.html`, CDN-only dependencies
-- **[PeerJS](https://peerjs.com/) v1.5.5** — WebRTC data connection abstraction
+- **[PeerJS](https://peerjs.com/) v1.5.5** — WebRTC data connection abstraction (1 control + 4 transfer channels)
 - **[qrcode-generator](https://github.com/nicfit/qrcode-generator) v1.4.4** — QR code rendering to canvas
 - **Vanilla JS** — no framework, no build step

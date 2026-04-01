@@ -321,18 +321,25 @@
 
   <script>
     // ── Constants ──────────────────────────────────────────────
-    const CHUNK_SIZE = 64 * 1024; // 64KB
+    const CHUNK_SIZE = 256 * 1024; // 256KB — larger chunks reduce per-chunk overhead
     const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I, O
     const PEER_PREFIX = 'peerdrop-';
+    const NUM_CHANNELS = 4;       // parallel transfer data channels
+    const BUFFER_HIGH = 2 * 1024 * 1024;  // pause sending at 2MB buffered
+    const BUFFER_LOW  = 512 * 1024;       // resume sending at 512KB buffered
 
     // ── State ─────────────────────────────────────────────────
     let peer = null;
-    let conn = null;
+    let conn = null;              // control connection (metadata, text, offers)
+    let transferChannels = [];    // DataConnection[] for chunk data
+    let channelsReady = 0;
     let isHost = false;
     let roomCode = '';
-    let incomingTransfers = {}; // id -> { name, size, mimeType, totalChunks, chunks[], received }
-    let outgoingQueue = [];     // File[]
+    let incomingTransfers = {};   // id -> { name, size, mimeType, totalChunks, received, nextWriteIndex, pendingChunks, chunks, writable, startTime, paused }
+    let outgoingTransfers = {};   // id -> { file, totalChunks, nextChunk, startTime, resolve }
+    let outgoingQueue = [];       // File[]
     let sending = false;
+    let wakeLock = null;
 
     // ── DOM refs ──────────────────────────────────────────────
     const $statusDot = document.getElementById('status-dot');
@@ -383,6 +390,24 @@
     function clearError() {
       $errorSection.classList.add('hidden');
     }
+
+    // ── Wake Lock ─────────────────────────────────────────────
+    async function acquireWakeLock() {
+      if (!navigator.wakeLock) return;
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } catch (e) { /* not supported or denied */ }
+    }
+
+    function releaseWakeLock() {
+      if (wakeLock) { wakeLock.release(); wakeLock = null; }
+    }
+
+    // Re-acquire wake lock when tab becomes visible again (auto-released on hide)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && conn && conn.open) acquireWakeLock();
+    });
 
     // ── QR Code ───────────────────────────────────────────────
     function renderQR(url) {
@@ -478,11 +503,35 @@
       processQueue();
     }
 
+    // Backpressure: wait until a channel's buffer drains
+    function waitForDrain(channel) {
+      const dc = channel.dataChannel || channel._dc;
+      if (!dc || dc.bufferedAmount <= BUFFER_HIGH) return Promise.resolve();
+      return new Promise(resolve => {
+        dc.bufferedAmountLowThreshold = BUFFER_LOW;
+        const onLow = () => { dc.onbufferedamountlow = null; resolve(); };
+        dc.onbufferedamountlow = onLow;
+        // Fallback poll in case event doesn't fire
+        const poll = setInterval(() => {
+          if (!dc || dc.bufferedAmount <= BUFFER_LOW) { clearInterval(poll); dc.onbufferedamountlow = null; resolve(); }
+        }, 100);
+      });
+    }
+
+    // Pick channels for sending: transfer channels if available, else control conn
+    function getSendChannels() {
+      const ready = transferChannels.filter(ch => ch && ch.open);
+      return ready.length > 0 ? ready : (conn && conn.open ? [conn] : []);
+    }
+
     async function sendFile(file) {
       const id = generateTransferId();
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
-      // Send offer
+      // Persist transfer state for resume
+      outgoingTransfers[id] = { file, totalChunks, nextChunk: 0, startTime: Date.now() };
+
+      // Send offer over control connection
       conn.send({
         type: 'file-offer',
         id, name: file.name,
@@ -491,7 +540,6 @@
         totalChunks
       });
 
-      // Show pending card
       addActivityCard('send-' + id, `
         <div class="transfer-item">
           <div class="transfer-header">
@@ -502,9 +550,9 @@
         </div>
       `);
 
-      // Wait for accept/decline
       const accepted = await waitForResponse(id);
       if (!accepted) {
+        delete outgoingTransfers[id];
         updateActivityCard('send-' + id, `
           <div class="transfer-item">
             <div class="transfer-header">
@@ -517,47 +565,61 @@
         return;
       }
 
-      // Stream-read and send chunks (one slice at a time to avoid loading entire file)
-      const startTime = Date.now();
+      await sendChunks(id);
+    }
 
-      for (let i = 0; i < totalChunks; i++) {
+    async function sendChunks(id) {
+      const transfer = outgoingTransfers[id];
+      if (!transfer) return;
+      const { file, totalChunks } = transfer;
+      const channels = getSendChannels();
+      if (channels.length === 0) return; // disconnected, will resume later
+
+      for (let i = transfer.nextChunk; i < totalChunks; i++) {
+        // Check if connection dropped
+        if (!conn || !conn.open) {
+          transfer.nextChunk = i;
+          updateActivityCard('send-' + id, `
+            <div class="transfer-item">
+              <div class="transfer-header">
+                <span class="transfer-name">${escapeHtml(file.name)}</span>
+                <span class="transfer-size">${formatSize(file.size)}</span>
+              </div>
+              <div style="font-size:0.75rem;color:#c4a24e;">Paused — waiting to reconnect...</div>
+            </div>
+          `);
+          return; // will be resumed via handleTransferResume
+        }
+
+        const channel = channels[i % channels.length];
         const start = i * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, file.size);
         const chunk = await file.slice(start, end).arrayBuffer();
 
-        conn.send({ type: 'file-chunk', id, index: i, data: chunk });
+        channel.send({ type: 'file-chunk', id, index: i, data: chunk });
+        transfer.nextChunk = i + 1;
 
         // Update progress
-        const sent = end;
-        const pct = Math.round((sent / file.size) * 100);
-        const elapsed = (Date.now() - startTime) / 1000;
-        const speed = elapsed > 0 ? formatSize(sent / elapsed) + '/s' : '';
+        const pct = Math.round((end / file.size) * 100);
+        const elapsed = (Date.now() - transfer.startTime) / 1000;
+        const speed = elapsed > 0 ? formatSize(end / elapsed) + '/s' : '';
 
         updateActivityCard('send-' + id, `
           <div class="transfer-item">
             <div class="transfer-header">
               <span class="transfer-name">${escapeHtml(file.name)}</span>
-              <span class="transfer-size">${formatSize(sent)} / ${formatSize(file.size)}</span>
+              <span class="transfer-size">${formatSize(end)} / ${formatSize(file.size)}</span>
             </div>
             <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
             <div class="transfer-stats"><span>${pct}%</span><span>${speed}</span></div>
           </div>
         `);
 
-        // Backpressure: pause if buffer is large
-        const dc = conn.dataChannel || (conn._dc);
-        if (dc && dc.bufferedAmount > 1024 * 1024) {
-          await new Promise(r => {
-            const check = () => {
-              if (!dc || dc.bufferedAmount < 512 * 1024) r();
-              else setTimeout(check, 50);
-            };
-            setTimeout(check, 50);
-          });
-        }
+        await waitForDrain(channel);
       }
 
       conn.send({ type: 'file-complete', id });
+      delete outgoingTransfers[id];
 
       updateActivityCard('send-' + id, `
         <div class="transfer-item">
@@ -574,7 +636,10 @@
     // Promise that resolves when peer accepts/declines
     const pendingResponses = {};
     function waitForResponse(id) {
-      return new Promise(resolve => { pendingResponses[id] = resolve; });
+      return new Promise(resolve => {
+        pendingResponses[id] = resolve;
+        outgoingTransfers[id].resolve = resolve;
+      });
     }
 
     // ── File Transfer: Receiving ──────────────────────────────
@@ -590,7 +655,7 @@
         return;
       }
 
-      incomingTransfers[id] = { name, size, mimeType, totalChunks, received: 0, startTime: null, writable: null, chunks: null };
+      incomingTransfers[id] = { name, size, mimeType, totalChunks, received: 0, startTime: null, writable: null, chunks: null, nextWriteIndex: 0, pendingChunks: {} };
 
       const card = document.createElement('div');
       card.className = 'card';
@@ -689,9 +754,14 @@
       const index = Number(msg.index);
       if (index < 0 || index >= transfer.totalChunks) return;
 
-      // Stream to disk or buffer in memory
       if (transfer.writable) {
-        transfer.writable.write(new Blob([msg.data]));
+        // FSAPI streaming: must write in order. Buffer out-of-order chunks.
+        transfer.pendingChunks[index] = msg.data;
+        while (transfer.pendingChunks[transfer.nextWriteIndex] !== undefined) {
+          transfer.writable.write(new Blob([transfer.pendingChunks[transfer.nextWriteIndex]]));
+          delete transfer.pendingChunks[transfer.nextWriteIndex];
+          transfer.nextWriteIndex++;
+        }
       } else if (transfer.chunks) {
         transfer.chunks[index] = msg.data;
       }
@@ -746,6 +816,29 @@
       `);
 
       delete incomingTransfers[id];
+    }
+
+    // ── Transfer Resume ────────────────────────────────────────
+    function sendResumeState() {
+      // Tell the peer what incoming transfers we have in progress
+      const active = Object.entries(incomingTransfers).map(([id, t]) => ({
+        id, received: t.received
+      }));
+      if (active.length > 0) {
+        conn.send({ type: 'transfer-resume', transfers: active });
+      }
+    }
+
+    function handleTransferResume(msg) {
+      // Peer is telling us which of our outgoing transfers they've partially received
+      for (const { id, received } of msg.transfers) {
+        const transfer = outgoingTransfers[id];
+        if (transfer) {
+          transfer.nextChunk = received;
+          transfer.startTime = Date.now() - 1; // avoid /0
+          sendChunks(id);
+        }
+      }
     }
 
     // ── Text Sharing ──────────────────────────────────────────
@@ -828,6 +921,19 @@
     }
 
     // ── Connection Handling ───────────────────────────────────
+    function handleControlData(data) {
+      if (!data || !data.type) return;
+      switch (data.type) {
+        case 'file-offer': handleFileOffer(data); break;
+        case 'file-accept': { const rid = sanitizeId(data.id); if (pendingResponses[rid]) { pendingResponses[rid](true); delete pendingResponses[rid]; } break; }
+        case 'file-decline': { const rid = sanitizeId(data.id); if (pendingResponses[rid]) { pendingResponses[rid](false); delete pendingResponses[rid]; } break; }
+        case 'file-chunk': handleFileChunk(data); break;
+        case 'file-complete': handleFileComplete(data); break;
+        case 'text': handleTextMessage(data); break;
+        case 'transfer-resume': handleTransferResume(data); break;
+      }
+    }
+
     function setupConnection(connection) {
       conn = connection;
       conn.on('open', () => {
@@ -835,30 +941,28 @@
         clearError();
         $roomSection.classList.add('hidden');
         $sendSection.classList.remove('hidden');
+        acquireWakeLock();
+        openTransferChannels();
+        // After channels are ready (or immediately if none), exchange resume state
+        setTimeout(() => sendResumeState(), 500);
       });
 
-      conn.on('data', (data) => {
-        if (!data || !data.type) return;
-        switch (data.type) {
-          case 'file-offer': handleFileOffer(data); break;
-          case 'file-accept': { const rid = sanitizeId(data.id); if (pendingResponses[rid]) { pendingResponses[rid](true); delete pendingResponses[rid]; } break; }
-          case 'file-decline': { const rid = sanitizeId(data.id); if (pendingResponses[rid]) { pendingResponses[rid](false); delete pendingResponses[rid]; } break; }
-          case 'file-chunk': handleFileChunk(data); break;
-          case 'file-complete': handleFileComplete(data); break;
-          case 'text': handleTextMessage(data); break;
-        }
-      });
+      conn.on('data', handleControlData);
 
       conn.on('close', () => {
         conn = null;
+        transferChannels = [];
+        channelsReady = 0;
+        releaseWakeLock();
+        // Don't clear incomingTransfers or outgoingTransfers — needed for resume
         if (isHost) {
-          setStatus('waiting', 'Peer disconnected. Waiting for new connection...');
+          setStatus('waiting', 'Peer disconnected. Waiting for reconnection...');
           $sendSection.classList.add('hidden');
           $roomSection.classList.remove('hidden');
         } else {
           setStatus('disconnected', 'Peer disconnected. Reconnecting...');
           $sendSection.classList.add('hidden');
-          setTimeout(() => connectToHost(), 3000);
+          setTimeout(() => connectToHost(), 2000);
         }
       });
 
@@ -866,6 +970,33 @@
         console.error('Connection error:', err);
         showError('Connection error: ' + err.type);
       });
+    }
+
+    // ── Transfer Channels ─────────────────────────────────────
+    function openTransferChannels() {
+      if (isHost) return; // joiner opens channels to host
+      channelsReady = 0;
+      transferChannels = [];
+      for (let i = 0; i < NUM_CHANNELS; i++) {
+        const ch = peer.connect(PEER_PREFIX + roomCode, {
+          label: 'xfer-' + i,
+          reliable: true,
+          serialization: 'binary',
+          metadata: { type: 'xfer', index: i }
+        });
+        ch.on('open', () => { channelsReady++; });
+        ch.on('data', handleControlData); // chunks arrive here too
+        ch.on('error', (err) => console.error('Transfer channel error:', err));
+        transferChannels[i] = ch;
+      }
+    }
+
+    function acceptTransferChannel(incoming) {
+      const idx = incoming.metadata.index;
+      transferChannels[idx] = incoming;
+      incoming.on('open', () => { channelsReady++; });
+      incoming.on('data', handleControlData);
+      incoming.on('error', (err) => console.error('Transfer channel error:', err));
     }
 
     // ── PeerJS Init ───────────────────────────────────────────
@@ -883,14 +1014,20 @@
       });
 
       peer.on('connection', (incoming) => {
+        // Accept transfer channels from the connected peer
+        if (incoming.metadata && incoming.metadata.type === 'xfer') {
+          acceptTransferChannel(incoming);
+          return;
+        }
         if (conn && conn.open) {
-          // Already have a peer, reject
+          // Already have a peer, reject new control connections
           incoming.on('open', () => {
             incoming.send({ type: 'text', content: 'Room is full. Only 2 peers allowed.' });
             setTimeout(() => incoming.close(), 1000);
           });
           return;
         }
+        // New control connection (initial or reconnect)
         setStatus('connecting', 'Connecting...');
         setupConnection(incoming);
       });
@@ -964,6 +1101,7 @@
 
     // ── Cleanup ───────────────────────────────────────────────
     window.addEventListener('pagehide', () => {
+      releaseWakeLock();
       if (peer) peer.destroy();
     });
 
