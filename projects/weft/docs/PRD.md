@@ -696,10 +696,10 @@ All `CLAUDE.md` updates have been applied:
 ### 10.1 MVP includes
 
 - [x] Veilid WASM boots in browser (with WSS support, Worker polyfills)
-- [x] Veilid bootstraps via WSS proxy → AttachedWeak / PublicInternet ready
+- [x] Veilid bootstraps via WSS proxy → FullyAttached / OverAttached
 - [x] cr-sqlite boots in browser, creates schema, persists to IndexedDB
-- [ ] Create a room (generates DHT record + symmetric key)
-- [ ] Join a room (from invite: DHT key + encryption key)
+- [x] Create a room (generates DHT record + symmetric key) — live-tested, real DHT key on network
+- [ ] Join a room (from invite: DHT key + encryption key) — blocked by KeyPair parsing bug
 - [x] Post messages with a topic string
 - [x] View messages grouped by topic (topic-river layout)
 - [x] Topics sorted by most recent activity
@@ -805,9 +805,12 @@ Recommended order of implementation for Claude Code Web:
 16. ~~Set up Veilid Web Worker with startup config + Worker polyfills~~
 17. ~~Implement identity generation/persistence~~
 17b. ~~Bootstrap connectivity: WSS proxy via Cloudflare Tunnel → nginx → official bootstrap~~
-17c. ~~Network attachment: AttachedWeak + PublicInternet ready confirmed~~
-18. Implement DHT record creation for rooms ← **NEXT**
-19. Implement DHT record opening for room joins
+17c. ~~Network attachment: AttachedWeak → AttachedStrong → FullyAttached → OverAttached confirmed~~
+18. ~~Implement DHT record creation for rooms (live-tested: real DHT key created on network)~~
+    - Fixed DHTSchema format: externally-tagged Rust enum (`{SMPL: {...}}` not `{kind: 'SMPL', ...}`)
+    - Fixed camelCase field names: `oCnt`, `mKey`, `mCnt` (WASM built with `json-camel-case`)
+    - Fixed member key type: pass `BareMemberId` WASM object, not stringified key
+19. Implement DHT record opening for room joins ← **NEXT** (KeyPair parsing bug: "input has incorrect parts")
 20. Implement AppMessage send/receive for real-time messages
 21. Implement presence updates in DHT subkeys
 22. Test: two browser tabs can exchange messages in real-time
