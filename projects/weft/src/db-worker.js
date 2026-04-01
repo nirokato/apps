@@ -221,6 +221,8 @@ const actions = {
         created_by: room.created_by,
         created_at: room.created_at,
         dht_key: room.dht_key || null,
+        owner_key: room.owner_key || null,
+        owner_secret: room.owner_secret || null,
       },
       members: members.map(m => ({
         public_key: m.public_key,
@@ -237,7 +239,7 @@ const actions = {
         edited_at: m.edited_at,
         deleted: m.deleted
       })),
-      encryption_key: null
+      encryption_key: room.encryption_key || null
     };
   },
 
@@ -245,8 +247,8 @@ const actions = {
     const { room, members, messages } = data;
 
     await db.exec(
-      'INSERT OR IGNORE INTO rooms (id, name, created_by, created_at, dht_key, encryption_key) VALUES (?, ?, ?, ?, ?, ?)',
-      [room.id, room.name, room.created_by, room.created_at, room.dht_key || '', data.encryption_key || '']
+      'INSERT OR IGNORE INTO rooms (id, name, created_by, created_at, dht_key, owner_key, owner_secret, encryption_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [room.id, room.name, room.created_by, room.created_at, room.dht_key || '', room.owner_key || '', room.owner_secret || '', data.encryption_key || '']
     );
 
     for (const m of members) {
