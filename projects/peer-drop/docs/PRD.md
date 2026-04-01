@@ -125,7 +125,7 @@ Peer A (initiator)                    Peer B (joiner)
 
 - **Selection:** Drag-and-drop (desktop) + file picker button (all platforms). `<input type="file" multiple>`.
 - **Accept prompt:** Receiver sees file name, human-readable size, and file type. Must click "Accept" or "Decline".
-- **Chunking:** Files sliced into 64KB `ArrayBuffer` chunks.
+- **Chunking:** Files stream-read in 64KB slices via `file.slice()` — constant memory on the send side regardless of file size.
 - **Protocol messages (JSON over DataConnection):**
 
 ```
@@ -151,7 +151,7 @@ Peer A (initiator)                    Peer B (joiner)
 ```
 
 - **Progress:** Sender tracks chunks sent. Receiver tracks chunks received. Both display a determinate progress bar with percentage, transferred/total size, and (if feasible) speed estimate.
-- **Completion:** Receiver auto-downloads the file via a Blob URL and `<a download>` click.
+- **Completion:** On Chrome/Edge, receiver streams chunks to disk via File System Access API (`showSaveFilePicker` + `createWritable`). On Firefox/Safari, falls back to Blob assembly + `<a download>` click.
 - **Queue:** Multiple files sent sequentially (one at a time to avoid memory pressure).
 
 ### 4.4 Text sharing
@@ -199,7 +199,7 @@ The following mitigations are implemented to defend against a malicious peer:
 |--------|-----------|
 | XSS via text messages | Text rendered via DOM API (`createElement`/`textContent`), never `innerHTML` |
 | XSS via transfer IDs | All peer-supplied IDs sanitized with `sanitizeId()` allowlist (`[a-zA-Z0-9_-]`) |
-| Memory exhaustion (huge file offer) | 500MB cap on `totalChunks`; oversized offers auto-declined |
+| Memory exhaustion (huge file offer) | Streaming I/O on both sides; `totalChunks` validated against declared `size` |
 | Out-of-bounds chunk writes | Chunk `index` validated against `[0, totalChunks)` |
 | Clipboard API failure | Fallback to `document.execCommand('copy')` via temporary textarea |
 | 0-byte file abuse | Empty files filtered from send queue |
@@ -227,26 +227,34 @@ projects/peer-drop/
     PRD.md          # This file
 ```
 
-### 7.3 Chunking strategy
+### 7.3 Streaming strategy
 
 ```javascript
 const CHUNK_SIZE = 64 * 1024; // 64KB
-const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB safety limit
 
-// Sender
-const buffer = await file.arrayBuffer();
-const totalChunks = Math.ceil(buffer.byteLength / CHUNK_SIZE);
+// Sender — stream-read one slice at a time (constant memory)
+const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 for (let i = 0; i < totalChunks; i++) {
-  const chunk = buffer.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+  const start = i * CHUNK_SIZE;
+  const end = Math.min(start + CHUNK_SIZE, file.size);
+  const chunk = await file.slice(start, end).arrayBuffer();
   conn.send({ type: 'file-chunk', id, index: i, data: chunk });
   // Backpressure: wait for data channel buffer to drain if >1MB queued
 }
 
-// Receiver
-const chunks = new Array(totalChunks);  // pre-allocated, indexed
-// On each chunk: chunks[index] = data; received++;
+// Receiver — stream-write to disk (Chrome/Edge via File System Access API)
+const handle = await showSaveFilePicker({ suggestedName: name });
+const writable = await handle.createWritable();
+// On each chunk: writable.write(new Blob([data]));
+// On complete: await writable.close();
+
+// Receiver fallback (Firefox/Safari) — accumulate in memory
+const chunks = new Array(totalChunks);
+// On each chunk: chunks[index] = data;
 // On complete: new Blob(chunks, { type: mimeType })
 ```
+
+No file size cap — streaming I/O keeps memory constant on the send side and on the receive side when the File System Access API is available. The in-memory fallback is bounded only by browser limits.
 
 ### 7.4 Room code generation
 
