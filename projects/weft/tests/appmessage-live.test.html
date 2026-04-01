@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html><head><title>Test: AppMessage Loopback (Live Network)</title></head>
+<body>
+<script type="module">
+import { t } from './harness.js';
+
+// --- Clear IndexedDB ---
+const dbs = await indexedDB.databases?.() || [];
+for (const db of dbs) {
+  if (db.name) indexedDB.deleteDatabase(db.name);
+}
+
+// --- Worker helper ---
+let callId = 0;
+const pending = new Map();
+let attachmentState = 'Detached';
+let attachResolve = null;
+const appMessages = [];
+let appMsgResolve = null;
+
+const worker = new Worker('../src/veilid-worker.js', { type: 'module' });
+
+worker.onmessage = (e) => {
+  const { id, result, error, type, update } = e.data;
+  if (type === 'update') {
+    if (update.kind === 'Attachment') {
+      attachmentState = update.state;
+      console.log('[appmsg] Attachment:', attachmentState);
+      if (attachResolve && isAttached(attachmentState)) {
+        attachResolve();
+        attachResolve = null;
+      }
+    }
+    if (update.kind === 'AppMessage') {
+      console.log('[appmsg] Received AppMessage');
+      appMessages.push(update);
+      if (appMsgResolve) {
+        appMsgResolve(update);
+        appMsgResolve = null;
+      }
+    }
+    return;
+  }
+  const p = pending.get(id);
+  if (!p) return;
+  pending.delete(id);
+  if (error) p.reject(new Error(error));
+  else p.resolve(result);
+};
+
+worker.onerror = (e) => {
+  e.preventDefault();
+  console.error('[appmsg] Worker error:', e.message);
+  for (const [, p] of pending) p.reject(new Error('Worker error: ' + e.message));
+  pending.clear();
+};
+
+function call(action, params, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    const id = callId++;
+    const timer = setTimeout(() => {
+      pending.delete(id);
+      reject(new Error(`Timeout: ${action} (${timeoutMs / 1000}s)`));
+    }, timeoutMs);
+    pending.set(id, {
+      resolve: (v) => { clearTimeout(timer); resolve(v); },
+      reject: (e) => { clearTimeout(timer); reject(e); },
+    });
+    worker.postMessage({ id, action, params });
+  });
+}
+
+function isAttached(s) {
+  return ['AttachedWeak', 'AttachedGood', 'AttachedStrong', 'FullyAttached', 'OverAttached'].includes(s);
+}
+
+function waitForAttach(ms = 90000) {
+  if (isAttached(attachmentState)) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    attachResolve = resolve;
+    setTimeout(() => reject(new Error('Attach timeout')), ms);
+  });
+}
+
+function waitForAppMessage(ms = 60000) {
+  if (appMessages.length > 0) return Promise.resolve(appMessages[0]);
+  return new Promise((resolve, reject) => {
+    appMsgResolve = resolve;
+    setTimeout(() => reject(new Error('AppMessage timeout (' + (ms / 1000) + 's)')), ms);
+  });
+}
+
+// --- Shared state across tests ---
+let publicKey, routeId, routeBlob, importedRouteId;
+const testPayload = 'hello-weft-appmsg-' + Date.now();
+
+// --- Register tests ---
+
+t.test('init: Veilid WASM loads and core starts', async (a) => {
+  await call('init', {}, 30000);
+});
+
+t.test('identity: generate keypair', async (a) => {
+  const kp = await call('generateKeyPair');
+  publicKey = kp.publicKey;
+  console.log('[appmsg] Identity:', publicKey);
+  a.ok(publicKey, 'has public key');
+});
+
+t.test('attach: wait for network (up to 90s)', async (a) => {
+  await waitForAttach(90000);
+  console.log('[appmsg] Attached:', attachmentState);
+  a.ok(isAttached(attachmentState), 'is attached');
+});
+
+t.test('createPrivateRoute: get receiving route', async (a) => {
+  const route = await call('createPrivateRoute', {}, 30000);
+  routeId = route.routeId;
+  routeBlob = route.blob;
+  console.log('[appmsg] Route blob length:', routeBlob?.length);
+  a.ok(routeId, 'has routeId');
+  a.ok(routeBlob && routeBlob.length > 0, 'has blob');
+});
+
+t.test('importRoute: import own route for loopback', async (a) => {
+  const result = await call('importRoute', { blob: Array.from(routeBlob) }, 15000);
+  importedRouteId = result.routeId;
+  console.log('[appmsg] Imported route:', importedRouteId);
+  a.ok(importedRouteId, 'has imported routeId');
+});
+
+t.test('sendAppMessage: send to own route', async (a) => {
+  await call('sendAppMessage', { target: importedRouteId, message: testPayload }, 15000);
+  console.log('[appmsg] Sent:', testPayload);
+});
+
+t.test('receiveAppMessage: loopback arrives', async (a) => {
+  const msg = await waitForAppMessage(60000);
+  let received;
+  if (msg.message) {
+    if (Array.isArray(msg.message) || msg.message instanceof Uint8Array) {
+      received = new TextDecoder().decode(new Uint8Array(msg.message));
+    } else if (typeof msg.message === 'string') {
+      received = msg.message;
+    } else {
+      received = JSON.stringify(msg.message);
+    }
+  }
+  console.log('[appmsg] Received:', received);
+  a.equal(received, testPayload, 'message content matches');
+});
+
+t.test('cleanup: shutdown', async (a) => {
+  try { await call('shutdown', {}, 5000); } catch (e) { /* non-fatal */ }
+});
+
+await t.end();
+</script>
+</body>
+</html>
