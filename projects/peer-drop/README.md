@@ -1,0 +1,95 @@
+# peer-drop
+
+Send files and text between devices. Peer-to-peer over WebRTC — your data never touches a server.
+
+**Live:** [peer-drop.apps.andymolenda.com](https://peer-drop.apps.andymolenda.com)
+
+## How it works
+
+1. Open peer-drop on one device — you get a room code and QR code
+2. Open the link (or scan the QR) on a second device
+3. Connected — drop files or send text in either direction
+4. Transfers flow directly between browsers via WebRTC data channels
+
+No accounts, no installs, no data stored anywhere. Close the tab and it's gone.
+
+## Features
+
+- **File transfer** — drag-and-drop or file picker, with chunked transfer and progress bars
+- **Text sharing** — paste a URL on your phone, it appears on your laptop instantly
+- **QR code pairing** — fastest way to connect phone to desktop
+- **Bidirectional** — either peer can send to the other
+- **Accept/decline** — receiver sees file name and size before accepting
+- **Sequential queue** — drop multiple files, they transfer one at a time
+
+## Architecture
+
+```
+┌─────────────────────┐         ┌─────────────────────┐
+│   Browser (Peer A)  │         │   Browser (Peer B)  │
+│                     │         │                     │
+│  UI ◄──► Connection │◄──────►│  Connection ◄──► UI │
+│          Manager    │  WebRTC │    Manager          │
+│                     │  (DTLS) │                     │
+└─────────────────────┘         └─────────────────────┘
+                  │                     │
+                  └───────┬─────────────┘
+                          │
+               PeerJS Cloud Signaling
+               (handshake only, no data)
+```
+
+- **PeerJS** brokers the WebRTC handshake via its free signaling server
+- **Data channels** carry all file chunks and text messages directly between peers
+- **DTLS encryption** is built into WebRTC — all transfers are encrypted in transit
+
+## File structure
+
+```
+projects/peer-drop/
+  index.html       # Entire application (HTML + CSS + JS, ~960 lines)
+  docs/
+    PRD.md          # Product requirements document
+  README.md         # This file
+```
+
+## Transfer protocol
+
+Files are chunked into 64KB `ArrayBuffer` slices and sent over a PeerJS `DataConnection`:
+
+```
+1. Sender → file-offer    { name, size, mimeType, totalChunks }
+2. Receiver → file-accept  or  file-decline
+3. Sender → file-chunk    { index, data }  ×N  (with backpressure)
+4. Sender → file-complete
+5. Receiver assembles Blob, triggers download
+```
+
+Text messages use a simple `{ type: "text", content: "..." }` envelope.
+
+## Security
+
+- All peer-supplied data (transfer IDs, filenames, text) is sanitized before rendering
+- Text messages rendered via DOM API (`createElement`/`textContent`), not `innerHTML`
+- Transfer IDs validated against an alphanumeric allowlist
+- 500MB file size cap to prevent memory exhaustion
+- Chunk indices bounds-checked on receive
+- No additional E2E encryption beyond WebRTC's built-in DTLS — suitable for trusted/casual use, not adversarial threat models
+
+## Running locally
+
+No build step. Serve the project directory with any static file server:
+
+```
+cd projects/peer-drop
+python3 -m http.server 8000
+```
+
+Open `http://localhost:8000` — you'll need two devices or browser tabs to test the connection (both must be able to reach the PeerJS signaling server).
+
+## Tech
+
+- **No bundler, no npm** — single `index.html`, CDN-only dependencies
+- **[PeerJS](https://peerjs.com/) v1.5.5** — WebRTC data connection abstraction
+- **[qrcode-generator](https://github.com/nicfit/qrcode-generator) v1.4.4** — QR code rendering to canvas
+- **Vanilla JS** — no framework, no build step
