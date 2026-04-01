@@ -84,10 +84,12 @@ Weft takes Zulip's stream→topic→message threading model — the best data mo
 
 | Component | Technology | Notes |
 |---|---|---|
-| Bootstrap node | Andy's home `veilid-server` | WSS via Cloudflare Tunnel |
-| Cloudflare Tunnel | `cloudflared` | Tunnels `wss://veilid.andymolenda.com` → `ws://localhost:5150` |
+| Bootstrap proxy | nginx on Andy's veilid node | Proxies WSS bootstrap requests to official Veilid bootstrap nodes |
+| Cloudflare Tunnel | `cloudflared` | Tunnels `wss://veilid.andymolenda.com` → `ws://localhost:5151` (nginx) |
+| Veilid node | Andy's home `veilid-server` v0.5.3 | Participates in DHT, relay, routing — but does NOT serve bootstrap requests over WebSocket |
 | DNS | Cloudflare (managed by OpenTofu) | `weft.apps.andymolenda.com` CNAME |
-| CI/CD | GitHub Actions (`deploy.yml` in `nirokato/apps`) | Static deploy + optional WASM build |
+| SSL | Cloudflare Advanced Certificate Manager | `*.apps.andymolenda.com` wildcard cert ($10/mo) |
+| CI/CD | GitHub Actions (`deploy.yml` in `nirokato/apps`) | Static deploy, auto-discovered from `projects/` directory |
 
 ### 3.3 What is NOT in the stack
 
@@ -228,19 +230,31 @@ LIMIT 20;
 
 ```
 1. Load veilid-wasm in Web Worker
-2. Call api_startup_json(config) with:
-   - network.routing_table.bootstrap = ["wss://veilid.andymolenda.com/ws"]
-   - network.protocol.ws.listen = false  (WASM can't listen)
-   - network.protocol.wss.listen = false
-   - table_store.directory = "weft-veilid"  (IndexedDB namespace)
-3. Wait for VeilidUpdate::Attachment(AttachedWeak | AttachedGood | AttachedStrong)
-4. Create RoutingContext (default safety routing)
-5. Check for existing identity in Veilid's protected store
-   - If none: generate new keypair, store in protected store
-   - If exists: load keypair
-6. Post identity public key to main thread → main thread writes to cr-sqlite local_identity
-7. For each room in cr-sqlite: open DHT record, set up watch, sync
+2. Apply polyfills:
+   - self.window = self (Worker has no Window)
+   - self.Window = self.constructor (so instanceof Window works)
+   - self.localStorage = in-memory Map shim (Workers have no localStorage)
+3. Call veilidClient.initializeCore(loggingConfig)
+4. Get defaultConfig() and customize:
+   - network.routingTable.bootstrap = ["wss://veilid.andymolenda.com/ws"]
+   - network.protocol.ws.connect = true, listen = false
+   - network.protocol.wss = { connect: true, listen: false }  (must be created, not in defaults)
+   - programName = "weft", namespace = "weft"
+5. Call veilidClient.startupCore(updateCallback, config)
+6. Call veilidClient.attach()
+7. Wait for VeilidUpdate Attachment: AttachedWeak | AttachedGood | AttachedStrong
+8. Create RoutingContext (default safety routing)
+9. Get crypto instance for VLD0
+10. Post ready to main thread → main thread writes identity to cr-sqlite
+11. For each room in cr-sqlite: open DHT record, set up watch, sync
 ```
+
+**Important findings from implementation:**
+- The WASM binary MUST be compiled with `--features enable-protocol-wss` (not in default features)
+- The `wss` config section does not exist in `defaultConfig()` — must be created before setting properties
+- Variable named `crypto` in Worker scope shadows `globalThis.crypto` due to `let` hoisting — renamed to `vldCrypto`
+- `instanceof Window` checks in wasm-bindgen glue require patching to accept `DedicatedWorkerGlobalScope`
+- The `__wbg_static_accessor_WINDOW` function must fall back to `self` in Worker context
 
 ### 5.2 DHT record design (per room)
 
@@ -330,13 +344,53 @@ Veilid's transport layer provides an additional layer of encryption and IP obfus
 
 The room's shared secret is never sent over the network — it is exchanged out-of-band as part of the room invite.
 
-### 5.5 Bootstrap node setup
+### 5.5 Bootstrap architecture
 
-Andy's home `veilid-server` needs:
-1. WebSocket listener enabled on port 5150 (default)
-2. Cloudflare Tunnel (`cloudflared`) routing `wss://veilid.andymolenda.com` → `ws://localhost:5150`
-3. The tunnel provides valid TLS termination, satisfying browser mixed-content requirements
-4. The node participates in the Veilid network normally, also serving as a DHT storage node
+**The problem:** HTTPS pages cannot make `ws://` connections (mixed content). The default Veilid WASM bootstrap is `ws://bootstrap-v1.veilid.net:5150/ws`. Veilid nodes do NOT respond to `BOOT`/`B01T` magic bytes over WebSocket — bootstrap handling only works on raw TCP/UDP in the current codebase.
+
+**The solution:** nginx on Andy's veilid node proxies WSS bootstrap requests to the official Veilid bootstrap server:
+
+```
+Browser (wss://veilid.andymolenda.com/ws)
+  → Cloudflare tunnel (TLS terminated at edge)
+    → nginx (127.0.0.1:5151, proxies /ws)
+      → bootstrap-v1.veilid.net:5150/ws (official bootstrap, responds to BOOT/B01T)
+```
+
+**Bootstrap protocol:**
+1. WASM client sends 4 bytes: `B01T` (v1 bootstrap request) or `BOOT` (v0)
+2. Official bootstrap server responds with JSON containing:
+   - `records`: array of TXT-format bootstrap records (node IDs, dial info)
+   - `peers`: array of signed PeerInfo objects
+3. WASM client parses response, connects to discovered peers via WS
+
+**What the proxy gives us:**
+- WSS termination via Cloudflare (browser mixed content satisfied)
+- Access to the real Veilid bootstrap network
+- Andy's veilid-server still runs on the same box for DHT storage and relay
+
+**nginx config** (`/etc/nginx/sites-enabled/veilid-ws` on 192.168.0.11):
+```nginx
+server {
+    listen 127.0.0.1:5151;
+    location /ws {
+        proxy_pass http://bootstrap-v1.veilid.net:5150/ws;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host bootstrap-v1.veilid.net;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+}
+```
+
+**veilid-server config** (`/etc/veilid-server/veilid-server.conf`):
+- WS: connect + listen on :5150, path `ws`
+- WSS: connect only, `url: 'wss://veilid.andymolenda.com/ws'` (advertises WSS availability to network)
+- UDP/TCP: standard on :5150
+
+**DNS TXT records (not currently set):** For future optimization, a TXT record on `veilid.andymolenda.com` in Veilid's bootstrap format would allow the WASM client to discover Andy's node directly without proxying to the official bootstrap. Format: `0|0|VLD0:<pubkey>|veilid.andymolenda.com|S443/ws`
 
 ---
 
@@ -600,7 +654,7 @@ projects/weft/
 |---|---|---|
 | lit-html | CDN import (`jsdelivr`) | Done |
 | cr-sqlite WASM | Vendored in `lib/crsqlite/` + `lib/wa-sqlite/` + `lib/xplat-api/` + `lib/async-mutex/` | Done (v0.16.0) |
-| veilid-wasm | Vendored in `wasm/veilid/` from GitLab CI artifacts | Done (v0.5.3) |
+| veilid-wasm | Vendored in `wasm/veilid/`, built from source with `--features enable-protocol-wss` | Done (v0.5.3+wss) |
 | ULID | Inline implementation in `src/ulid.js` | Done |
 | CBOR or JSON | TBD — JSON for initial implementation, CBOR if size matters | Not started |
 
@@ -615,12 +669,17 @@ projects/weft/
 - Deployed to Cloudflare Pages as static files
 - Subdomain `weft.apps.andymolenda.com` managed by OpenTofu (add to `tofu/variables.tf` projects set)
 
-**Future: CI-compiled WASM.** When Veilid WASM needs to be rebuilt from source (version pin, custom config), add a GitHub Actions job that:
-1. Sets up Rust + wasm-pack
-2. Clones veilid at a specific tag
-3. Runs `wasm-pack build --target web veilid-wasm`
-4. Copies output to `projects/weft/wasm/veilid/`
-5. Commits the artifacts (or uploads as a release asset)
+**WASM build process (currently manual via nspawn container on ares):**
+1. `sudo nspawn-manager start veilid-build`
+2. `cd veilid && git fetch && git checkout <tag>`
+3. `cd veilid-wasm && wasm-pack build --release --target web -- --features enable-protocol-wss`
+4. Copy `pkg/veilid_wasm.js` and `pkg/veilid_wasm_bg.wasm` to `projects/weft/wasm/veilid/`
+5. Apply Worker compatibility patches to `veilid_wasm.js`:
+   - `__wbg_instanceof_Window`: add `|| arg0 instanceof DedicatedWorkerGlobalScope`
+   - `__wbg_static_accessor_WINDOW`: fall back to `self` when `window` is undefined
+6. Commit and PR
+
+**Future: CI-compiled WASM.** Could add a GitHub Actions job, but the `enable-protocol-wss` flag + Worker patches make it non-trivial. The nspawn container on ares is the current build environment.
 
 ### 9.4 CLAUDE.md updates — DONE
 
@@ -636,7 +695,8 @@ All `CLAUDE.md` updates have been applied:
 
 ### 10.1 MVP includes
 
-- [x] Veilid WASM boots in browser, generates/loads identity
+- [x] Veilid WASM boots in browser (with WSS support, Worker polyfills)
+- [x] Veilid bootstraps via WSS proxy → AttachedWeak / PublicInternet ready
 - [x] cr-sqlite boots in browser, creates schema, persists to IndexedDB
 - [ ] Create a room (generates DHT record + symmetric key)
 - [ ] Join a room (from invite: DHT key + encryption key)
@@ -741,9 +801,11 @@ Recommended order of implementation for Claude Code Web:
 14. ~~Test: export from one browser, import in another, data matches~~
 
 ### Phase 3: Veilid integration — IN PROGRESS
-15. ~~Vendor veilid-wasm artifacts~~
-16. ~~Set up Veilid Web Worker with startup config~~
+15. ~~Vendor veilid-wasm artifacts (rebuilt with `enable-protocol-wss`)~~
+16. ~~Set up Veilid Web Worker with startup config + Worker polyfills~~
 17. ~~Implement identity generation/persistence~~
+17b. ~~Bootstrap connectivity: WSS proxy via Cloudflare Tunnel → nginx → official bootstrap~~
+17c. ~~Network attachment: AttachedWeak + PublicInternet ready confirmed~~
 18. Implement DHT record creation for rooms ← **NEXT**
 19. Implement DHT record opening for room joins
 20. Implement AppMessage send/receive for real-time messages
