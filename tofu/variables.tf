@@ -18,5 +18,5 @@ variable "domain" {
 variable "projects" {
   description = "Map of project names. Key = project name, used as subdomain under apps.andymolenda.com. 'homepage' is special — serves apps.andymolenda.com root."
   type        = set(string)
-  default     = ["homepage", "clock", "weft"]
+  default     = ["homepage", "clock", "weft", "peer-drop"]
 }

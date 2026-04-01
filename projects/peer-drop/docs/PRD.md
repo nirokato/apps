@@ -306,29 +306,29 @@ Note: Excludes `I` and `O` to avoid confusion with `1` and `0`.
 
 ### Phase 1: MVP
 
-- [ ] Project scaffolding (`index.html`, design system, back link)
-- [ ] Room code generation + URL hash management
-- [ ] PeerJS integration: host creates peer, joiner connects via hash
-- [ ] Connection state UI (all states from section 3.2)
-- [ ] QR code display for room URL
-- [ ] File send: drag-and-drop + file picker
-- [ ] File receive: accept prompt + chunked reassembly + auto-download
-- [ ] Transfer progress bar
-- [ ] Text send/receive with copy button
-- [ ] Mobile-responsive layout
-- [ ] Error handling and edge cases
+- [x] Project scaffolding (`index.html`, design system, back link)
+- [x] Room code generation + URL hash management
+- [x] PeerJS integration: host creates peer, joiner connects via hash
+- [x] Connection state UI (all states from section 3.2)
+- [x] QR code display for room URL
+- [x] File send: drag-and-drop + file picker
+- [x] File receive: accept prompt + chunked reassembly + auto-download
+- [x] Transfer progress bar
+- [x] Text send/receive with copy button
+- [x] Mobile-responsive layout
+- [x] Error handling and edge cases
 
 ### Phase 2: Polish (post-MVP)
 
 - [ ] Wake Lock API during transfers
-- [ ] Transfer speed estimate
+- [x] Transfer speed estimate
 - [ ] Sound/haptic on completion
 - [ ] Animated connection state transitions
-- [ ] "Copy room link" button with tooltip confirmation
+- [x] "Copy room link" button with tooltip confirmation
 - [ ] Accessibility audit (keyboard nav, screen reader labels, focus management)
 
 ### Phase 3: Infrastructure
 
-- [ ] Add `peer-drop` to `tofu/variables.tf` projects set
-- [ ] Add homepage link in `projects/homepage/index.html`
-- [ ] Update CLAUDE.md projects table
+- [x] Add `peer-drop` to `tofu/variables.tf` projects set
+- [x] Add homepage link in `projects/homepage/index.html`
+- [x] Update CLAUDE.md projects table

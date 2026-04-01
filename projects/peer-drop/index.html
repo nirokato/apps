@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>peer-drop — apps.andymolenda.com</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0f0f0c;
+      color: #e8e4d4;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container { max-width: 600px; width: 100%; padding: 2rem; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+    h1 .accent { color: #c4a24e; }
+    .subtitle { color: #9a9686; font-size: 0.9rem; margin-bottom: 2rem; }
+    .back { margin-top: 2rem; font-size: 0.85rem; }
+    .back a { color: #9a9686; text-decoration: none; }
+    .back a:hover { color: #c4a24e; }
+
+    /* Cards */
+    .card {
+      background: #1a1a16;
+      border: 1px solid #2a2a24;
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+
+    /* Status indicator */
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      margin-bottom: 1.25rem;
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .status-dot.connecting { background: #c4a24e; animation: pulse 1.5s infinite; }
+    .status-dot.connected { background: #4ec44e; }
+    .status-dot.disconnected { background: #c44e4e; }
+    .status-dot.waiting { background: #9a9686; animation: pulse 1.5s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .status-text { color: #9a9686; }
+
+    /* Room / QR section */
+    .room-section { text-align: center; }
+    .room-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 2.5rem;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      color: #c4a24e;
+      margin: 1rem 0 0.75rem;
+    }
+    .room-label { font-size: 0.8rem; color: #9a9686; }
+    #qr-canvas {
+      display: block;
+      margin: 1rem auto;
+      border-radius: 6px;
+    }
+    .room-url {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: #0f0f0c;
+      border: 1px solid #2a2a24;
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      margin-top: 1rem;
+    }
+    .room-url-text {
+      flex: 1;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: #9a9686;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Buttons */
+    .btn {
+      background: none;
+      border: 1px solid #2a2a24;
+      color: #e8e4d4;
+      border-radius: 6px;
+      padding: 0.4rem 0.75rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .btn:hover { border-color: #c4a24e; color: #c4a24e; }
+    .btn-primary {
+      background: #c4a24e;
+      border-color: #c4a24e;
+      color: #0f0f0c;
+      font-weight: 600;
+    }
+    .btn-primary:hover { background: #d4b25e; border-color: #d4b25e; }
+    .btn-decline {
+      border-color: #c44e4e;
+      color: #c44e4e;
+    }
+    .btn-decline:hover { background: #c44e4e; color: #0f0f0c; }
+
+    /* Drop zone */
+    .drop-zone {
+      border: 2px dashed #2a2a24;
+      border-radius: 8px;
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #c4a24e;
+      background: rgba(196, 162, 78, 0.05);
+    }
+    .drop-zone-icon {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+      color: #9a9686;
+    }
+    .drop-zone-text { font-size: 0.85rem; color: #9a9686; }
+    .drop-zone-text strong { color: #c4a24e; }
+    #file-input { display: none; }
+
+    /* Text send */
+    .text-send {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+    .text-send input {
+      flex: 1;
+      background: #0f0f0c;
+      border: 1px solid #2a2a24;
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      color: #e8e4d4;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .text-send input:focus { border-color: #c4a24e; }
+    .text-send input::placeholder { color: #9a9686; }
+
+    /* Transfer items */
+    .transfer-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .transfer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+    }
+    .transfer-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 70%;
+    }
+    .transfer-size { color: #9a9686; font-size: 0.8rem; }
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: #0f0f0c;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: #c4a24e;
+      border-radius: 3px;
+      transition: width 0.15s;
+      width: 0%;
+    }
+    .progress-fill.complete { background: #4ec44e; }
+    .transfer-stats {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: #9a9686;
+    }
+
+    /* Accept prompt */
+    .accept-prompt {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+    .accept-info { flex: 1; min-width: 0; }
+    .accept-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+
+    /* Text messages */
+    .text-message {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+    .text-content {
+      flex: 1;
+      font-size: 0.85rem;
+      word-break: break-word;
+      min-width: 0;
+    }
+    .text-content a { color: #c4a24e; text-decoration: none; }
+    .text-content a:hover { text-decoration: underline; }
+    .text-direction {
+      font-size: 0.7rem;
+      color: #9a9686;
+      margin-bottom: 0.25rem;
+    }
+
+    /* Hidden sections */
+    .hidden { display: none !important; }
+
+    /* Error card */
+    .error-card { border-color: #c44e4e; }
+    .error-text { color: #c44e4e; font-size: 0.85rem; }
+
+    /* Tooltip for copy */
+    .copy-tooltip {
+      position: relative;
+    }
+    .copy-tooltip::after {
+      content: 'Copied!';
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2a2a24;
+      color: #e8e4d4;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s;
+    }
+    .copy-tooltip.show::after { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>peer<span class="accent">-</span>drop</h1>
+    <p class="subtitle">Send files and text between devices. Peer-to-peer, no server.</p>
+
+    <!-- Status -->
+    <div class="status">
+      <div id="status-dot" class="status-dot waiting"></div>
+      <span id="status-text" class="status-text">Initializing...</span>
+    </div>
+
+    <!-- Room / Waiting section -->
+    <div id="room-section" class="card room-section">
+      <p class="room-label">Share this link to connect</p>
+      <div id="room-code" class="room-code"></div>
+      <canvas id="qr-canvas" width="160" height="160"></canvas>
+      <div class="room-url">
+        <span id="room-url-text" class="room-url-text"></span>
+        <button class="btn" onclick="copyRoomUrl()" id="copy-btn">Copy</button>
+      </div>
+    </div>
+
+    <!-- Error section -->
+    <div id="error-section" class="card error-card hidden">
+      <p id="error-text" class="error-text"></p>
+    </div>
+
+    <!-- Send section (shown when connected) -->
+    <div id="send-section" class="hidden">
+      <!-- Drop zone -->
+      <div class="card">
+        <div id="drop-zone" class="drop-zone">
+          <div class="drop-zone-icon">&#8595;</div>
+          <p class="drop-zone-text">Drop files here or <strong>click to pick</strong></p>
+        </div>
+        <input type="file" id="file-input" multiple>
+
+        <!-- Text send -->
+        <div class="text-send">
+          <input type="text" id="text-input" placeholder="Send text or a link..." autocomplete="off">
+          <button class="btn btn-primary" id="text-send-btn" onclick="sendText()">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Activity feed (transfers + text messages) -->
+    <div id="activity-feed"></div>
+
+    <p class="back"><a href="https://apps.andymolenda.com">&larr; apps.andymolenda.com</a></p>
+  </div>
+
+  <script>
+    // ── Constants ──────────────────────────────────────────────
+    const CHUNK_SIZE = 64 * 1024; // 64KB
+    const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // no I, O
+    const PEER_PREFIX = 'peerdrop-';
+
+    // ── State ─────────────────────────────────────────────────
+    let peer = null;
+    let conn = null;
+    let isHost = false;
+    let roomCode = '';
+    let incomingTransfers = {}; // id -> { name, size, mimeType, totalChunks, chunks[], received }
+    let outgoingQueue = [];     // File[]
+    let sending = false;
+
+    // ── DOM refs ──────────────────────────────────────────────
+    const $statusDot = document.getElementById('status-dot');
+    const $statusText = document.getElementById('status-text');
+    const $roomSection = document.getElementById('room-section');
+    const $roomCode = document.getElementById('room-code');
+    const $roomUrlText = document.getElementById('room-url-text');
+    const $errorSection = document.getElementById('error-section');
+    const $errorText = document.getElementById('error-text');
+    const $sendSection = document.getElementById('send-section');
+    const $dropZone = document.getElementById('drop-zone');
+    const $fileInput = document.getElementById('file-input');
+    const $textInput = document.getElementById('text-input');
+    const $activityFeed = document.getElementById('activity-feed');
+
+    // ── Utilities ─────────────────────────────────────────────
+    function generateCode(len = 4) {
+      const bytes = crypto.getRandomValues(new Uint8Array(len));
+      return Array.from(bytes).map(b => CODE_CHARS[b % CODE_CHARS.length]).join('');
+    }
+
+    function formatSize(bytes) {
+      if (bytes === 0) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(1024));
+      return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+    }
+
+    function generateTransferId() {
+      return crypto.getRandomValues(new Uint32Array(1))[0].toString(36);
+    }
+
+    function isUrl(text) {
+      try { return /^https?:\/\/.+/.test(text); } catch { return false; }
+    }
+
+    // ── Status ────────────────────────────────────────────────
+    function setStatus(state, text) {
+      $statusDot.className = 'status-dot ' + state;
+      $statusText.textContent = text;
+    }
+
+    function showError(msg) {
+      $errorSection.classList.remove('hidden');
+      $errorText.textContent = msg;
+    }
+
+    function clearError() {
+      $errorSection.classList.add('hidden');
+    }
+
+    // ── QR Code ───────────────────────────────────────────────
+    function renderQR(url) {
+      const qr = qrcode(0, 'M');
+      qr.addData(url);
+      qr.make();
+
+      const canvas = document.getElementById('qr-canvas');
+      const ctx = canvas.getContext('2d');
+      const size = 160;
+      const modules = qr.getModuleCount();
+      const cellSize = size / modules;
+
+      canvas.width = size;
+      canvas.height = size;
+
+      ctx.fillStyle = '#1a1a16';
+      ctx.fillRect(0, 0, size, size);
+
+      ctx.fillStyle = '#c4a24e';
+      for (let row = 0; row < modules; row++) {
+        for (let col = 0; col < modules; col++) {
+          if (qr.isDark(row, col)) {
+            ctx.fillRect(col * cellSize, row * cellSize, cellSize + 0.5, cellSize + 0.5);
+          }
+        }
+      }
+    }
+
+    // ── Room URL ──────────────────────────────────────────────
+    function getRoomUrl() {
+      return window.location.origin + window.location.pathname + '#' + roomCode;
+    }
+
+    function copyRoomUrl() {
+      navigator.clipboard.writeText(getRoomUrl()).then(() => {
+        const btn = document.getElementById('copy-btn');
+        btn.classList.add('copy-tooltip', 'show');
+        setTimeout(() => btn.classList.remove('show'), 1500);
+      });
+    }
+
+    // ── Activity Feed ─────────────────────────────────────────
+    function addActivityCard(id, html) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.id = 'activity-' + id;
+      card.innerHTML = html;
+      $activityFeed.prepend(card);
+      return card;
+    }
+
+    function updateActivityCard(id, html) {
+      const card = document.getElementById('activity-' + id);
+      if (card) card.innerHTML = html;
+    }
+
+    function removeActivityCard(id) {
+      const card = document.getElementById('activity-' + id);
+      if (card) card.remove();
+    }
+
+    // ── File Transfer: Sending ────────────────────────────────
+    function queueFiles(files) {
+      if (!conn || conn.open !== true) return;
+      outgoingQueue.push(...Array.from(files));
+      if (!sending) processQueue();
+    }
+
+    async function processQueue() {
+      if (outgoingQueue.length === 0) { sending = false; return; }
+      sending = true;
+      const file = outgoingQueue.shift();
+      await sendFile(file);
+      processQueue();
+    }
+
+    async function sendFile(file) {
+      const id = generateTransferId();
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+      // Send offer
+      conn.send({
+        type: 'file-offer',
+        id, name: file.name,
+        size: file.size,
+        mimeType: file.type || 'application/octet-stream',
+        totalChunks
+      });
+
+      // Show pending card
+      addActivityCard('send-' + id, `
+        <div class="transfer-item">
+          <div class="transfer-header">
+            <span class="transfer-name">${escapeHtml(file.name)}</span>
+            <span class="transfer-size">${formatSize(file.size)}</span>
+          </div>
+          <div style="font-size:0.75rem;color:#9a9686;">Waiting for peer to accept...</div>
+        </div>
+      `);
+
+      // Wait for accept/decline
+      const accepted = await waitForResponse(id);
+      if (!accepted) {
+        updateActivityCard('send-' + id, `
+          <div class="transfer-item">
+            <div class="transfer-header">
+              <span class="transfer-name">${escapeHtml(file.name)}</span>
+              <span class="transfer-size">${formatSize(file.size)}</span>
+            </div>
+            <div style="font-size:0.75rem;color:#c44e4e;">Declined by peer</div>
+          </div>
+        `);
+        return;
+      }
+
+      // Read and send chunks
+      const buffer = await file.arrayBuffer();
+      const startTime = Date.now();
+
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, buffer.byteLength);
+        const chunk = buffer.slice(start, end);
+
+        conn.send({ type: 'file-chunk', id, index: i, data: chunk });
+
+        // Update progress
+        const sent = Math.min(end, file.size);
+        const pct = Math.round((sent / file.size) * 100);
+        const elapsed = (Date.now() - startTime) / 1000;
+        const speed = elapsed > 0 ? formatSize(sent / elapsed) + '/s' : '';
+
+        updateActivityCard('send-' + id, `
+          <div class="transfer-item">
+            <div class="transfer-header">
+              <span class="transfer-name">${escapeHtml(file.name)}</span>
+              <span class="transfer-size">${formatSize(sent)} / ${formatSize(file.size)}</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+            <div class="transfer-stats"><span>${pct}%</span><span>${speed}</span></div>
+          </div>
+        `);
+
+        // Backpressure: pause if buffer is large
+        if (conn.dataChannel && conn.dataChannel.bufferedAmount > 1024 * 1024) {
+          await new Promise(r => setTimeout(r, 50));
+        }
+      }
+
+      conn.send({ type: 'file-complete', id });
+
+      updateActivityCard('send-' + id, `
+        <div class="transfer-item">
+          <div class="transfer-header">
+            <span class="transfer-name">${escapeHtml(file.name)}</span>
+            <span class="transfer-size">${formatSize(file.size)}</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill complete" style="width:100%"></div></div>
+          <div class="transfer-stats"><span>Sent</span><span style="color:#4ec44e;">Complete</span></div>
+        </div>
+      `);
+    }
+
+    // Promise that resolves when peer accepts/declines
+    const pendingResponses = {};
+    function waitForResponse(id) {
+      return new Promise(resolve => { pendingResponses[id] = resolve; });
+    }
+
+    // ── File Transfer: Receiving ──────────────────────────────
+    function handleFileOffer(msg) {
+      const { id, name, size, mimeType, totalChunks } = msg;
+      incomingTransfers[id] = { name, size, mimeType, totalChunks, chunks: new Array(totalChunks), received: 0, startTime: null };
+
+      addActivityCard('recv-' + id, `
+        <div class="accept-prompt">
+          <div class="accept-info">
+            <div class="transfer-name">${escapeHtml(name)}</div>
+            <div class="transfer-size">${formatSize(size)}</div>
+          </div>
+          <div class="accept-actions">
+            <button class="btn btn-primary" onclick="respondToOffer('${id}', true)">Accept</button>
+            <button class="btn btn-decline" onclick="respondToOffer('${id}', false)">Decline</button>
+          </div>
+        </div>
+      `);
+    }
+
+    function respondToOffer(id, accept) {
+      conn.send({ type: accept ? 'file-accept' : 'file-decline', id });
+      if (!accept) {
+        delete incomingTransfers[id];
+        updateActivityCard('recv-' + id, `
+          <div class="transfer-item">
+            <div class="transfer-header">
+              <span class="transfer-name">File declined</span>
+            </div>
+          </div>
+        `);
+        setTimeout(() => removeActivityCard('recv-' + id), 2000);
+      } else {
+        incomingTransfers[id].startTime = Date.now();
+        updateActivityCard('recv-' + id, `
+          <div class="transfer-item">
+            <div class="transfer-header">
+              <span class="transfer-name">${escapeHtml(incomingTransfers[id].name)}</span>
+              <span class="transfer-size">0 B / ${formatSize(incomingTransfers[id].size)}</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
+            <div class="transfer-stats"><span>0%</span><span></span></div>
+          </div>
+        `);
+      }
+    }
+
+    function handleFileChunk(msg) {
+      const transfer = incomingTransfers[msg.id];
+      if (!transfer) return;
+
+      transfer.chunks[msg.index] = msg.data;
+      transfer.received++;
+
+      const receivedBytes = Math.min(transfer.received * CHUNK_SIZE, transfer.size);
+      const pct = Math.round((receivedBytes / transfer.size) * 100);
+      const elapsed = (Date.now() - transfer.startTime) / 1000;
+      const speed = elapsed > 0 ? formatSize(receivedBytes / elapsed) + '/s' : '';
+
+      updateActivityCard('recv-' + msg.id, `
+        <div class="transfer-item">
+          <div class="transfer-header">
+            <span class="transfer-name">${escapeHtml(transfer.name)}</span>
+            <span class="transfer-size">${formatSize(receivedBytes)} / ${formatSize(transfer.size)}</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+          <div class="transfer-stats"><span>${pct}%</span><span>${speed}</span></div>
+        </div>
+      `);
+    }
+
+    function handleFileComplete(msg) {
+      const transfer = incomingTransfers[msg.id];
+      if (!transfer) return;
+
+      // Reassemble and download
+      const blob = new Blob(transfer.chunks, { type: transfer.mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = transfer.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+      updateActivityCard('recv-' + msg.id, `
+        <div class="transfer-item">
+          <div class="transfer-header">
+            <span class="transfer-name">${escapeHtml(transfer.name)}</span>
+            <span class="transfer-size">${formatSize(transfer.size)}</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill complete" style="width:100%"></div></div>
+          <div class="transfer-stats"><span>Received</span><span style="color:#4ec44e;">Complete</span></div>
+        </div>
+      `);
+
+      delete incomingTransfers[msg.id];
+    }
+
+    // ── Text Sharing ──────────────────────────────────────────
+    function sendText() {
+      const text = $textInput.value.trim();
+      if (!text || !conn || conn.open !== true) return;
+      conn.send({ type: 'text', content: text });
+      $textInput.value = '';
+      addTextMessage(text, 'sent');
+    }
+
+    function handleTextMessage(msg) {
+      addTextMessage(msg.content, 'received');
+    }
+
+    function addTextMessage(text, direction) {
+      const id = 'text-' + Date.now();
+      const label = direction === 'sent' ? 'You sent' : 'Received';
+      const displayText = isUrl(text)
+        ? `<a href="${escapeHtml(text)}" target="_blank" rel="noopener">${escapeHtml(text)}</a>`
+        : escapeHtml(text);
+
+      addActivityCard(id, `
+        <div class="text-message">
+          <div class="text-content">
+            <div class="text-direction">${label}</div>
+            ${displayText}
+          </div>
+          <button class="btn" onclick="copyText(this, '${escapeAttr(text)}')">Copy</button>
+        </div>
+      `);
+    }
+
+    function copyText(btn, text) {
+      navigator.clipboard.writeText(text).then(() => {
+        btn.classList.add('copy-tooltip', 'show');
+        setTimeout(() => btn.classList.remove('show'), 1500);
+      });
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function escapeAttr(str) {
+      return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+
+    // ── Connection Handling ───────────────────────────────────
+    function setupConnection(connection) {
+      conn = connection;
+      conn.on('open', () => {
+        setStatus('connected', 'Connected to peer');
+        clearError();
+        $roomSection.classList.add('hidden');
+        $sendSection.classList.remove('hidden');
+      });
+
+      conn.on('data', (data) => {
+        if (!data || !data.type) return;
+        switch (data.type) {
+          case 'file-offer': handleFileOffer(data); break;
+          case 'file-accept': if (pendingResponses[data.id]) { pendingResponses[data.id](true); delete pendingResponses[data.id]; } break;
+          case 'file-decline': if (pendingResponses[data.id]) { pendingResponses[data.id](false); delete pendingResponses[data.id]; } break;
+          case 'file-chunk': handleFileChunk(data); break;
+          case 'file-complete': handleFileComplete(data); break;
+          case 'text': handleTextMessage(data); break;
+        }
+      });
+
+      conn.on('close', () => {
+        setStatus('disconnected', 'Peer disconnected');
+        conn = null;
+        // If joiner, try to reconnect
+        if (!isHost) {
+          setTimeout(() => connectToHost(), 3000);
+        }
+      });
+
+      conn.on('error', (err) => {
+        console.error('Connection error:', err);
+        showError('Connection error: ' + err.type);
+      });
+    }
+
+    // ── PeerJS Init ───────────────────────────────────────────
+    function initPeer(id) {
+      peer = new Peer(id, { reliable: true });
+
+      peer.on('open', (myId) => {
+        if (isHost) {
+          setStatus('waiting', 'Waiting for peer to connect...');
+          const url = getRoomUrl();
+          $roomCode.textContent = roomCode;
+          $roomUrlText.textContent = url;
+          renderQR(url);
+        }
+      });
+
+      peer.on('connection', (incoming) => {
+        if (conn && conn.open) {
+          // Already have a peer, reject
+          incoming.on('open', () => {
+            incoming.send({ type: 'text', content: 'Room is full. Only 2 peers allowed.' });
+            setTimeout(() => incoming.close(), 1000);
+          });
+          return;
+        }
+        setStatus('connecting', 'Connecting...');
+        setupConnection(incoming);
+      });
+
+      peer.on('error', (err) => {
+        console.error('Peer error:', err);
+        if (err.type === 'peer-unavailable') {
+          showError('Room not found. Check the code and try again.');
+          setStatus('disconnected', 'Room not found');
+        } else if (err.type === 'unavailable-id') {
+          // ID taken — generate a new code if host
+          if (isHost) {
+            peer.destroy();
+            roomCode = generateCode();
+            window.location.hash = roomCode;
+            initPeer(PEER_PREFIX + roomCode);
+          }
+        } else {
+          showError('Connection error: ' + (err.message || err.type));
+          setStatus('disconnected', 'Error');
+        }
+      });
+
+      peer.on('disconnected', () => {
+        // Try to reconnect to signaling server
+        if (!peer.destroyed) {
+          peer.reconnect();
+        }
+      });
+    }
+
+    function connectToHost() {
+      if (!peer || peer.destroyed) return;
+      if (conn && conn.open) return;
+      setStatus('connecting', 'Connecting to peer...');
+      const connection = peer.connect(PEER_PREFIX + roomCode, {
+        reliable: true,
+        serialization: 'binary'
+      });
+      setupConnection(connection);
+    }
+
+    // ── Drag & Drop ───────────────────────────────────────────
+    $dropZone.addEventListener('click', () => $fileInput.click());
+    $fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) queueFiles(e.target.files);
+      e.target.value = '';
+    });
+
+    $dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      $dropZone.classList.add('dragover');
+    });
+    $dropZone.addEventListener('dragleave', () => {
+      $dropZone.classList.remove('dragover');
+    });
+    $dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      $dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) queueFiles(e.dataTransfer.files);
+    });
+
+    // Prevent page-level drops
+    document.addEventListener('dragover', (e) => e.preventDefault());
+    document.addEventListener('drop', (e) => e.preventDefault());
+
+    // ── Text input: Enter to send ─────────────────────────────
+    $textInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendText();
+    });
+
+    // ── Cleanup ───────────────────────────────────────────────
+    window.addEventListener('pagehide', () => {
+      if (peer) peer.destroy();
+    });
+
+    // ── Bootstrap ─────────────────────────────────────────────
+    (function init() {
+      const hash = window.location.hash.slice(1).toUpperCase();
+
+      if (hash && hash.length >= 3 && hash.length <= 6) {
+        // Joiner
+        isHost = false;
+        roomCode = hash;
+        $roomSection.classList.add('hidden');
+        setStatus('connecting', 'Connecting to room ' + roomCode + '...');
+        initPeer(PEER_PREFIX + roomCode + '-' + generateCode(3));
+        // Small delay to ensure peer is registered before connecting
+        peer.on('open', () => connectToHost());
+      } else {
+        // Host
+        isHost = true;
+        roomCode = generateCode();
+        window.location.hash = roomCode;
+        setStatus('connecting', 'Connecting to signaling server...');
+        initPeer(PEER_PREFIX + roomCode);
+      }
+    })();
+  </script>
+</body>
+</html>
