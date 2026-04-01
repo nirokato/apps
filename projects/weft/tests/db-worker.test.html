@@ -329,6 +329,26 @@ t.test('import: idempotent (no duplicates on re-import)', async (a) => {
   a.equal(msgs.length, 2, 'still 2 messages after re-import');
 });
 
+t.test('export: includes owner credentials and encryption key', async (a) => {
+  const data = await call('exportRoom', { roomId: 'room-2' });
+  a.equal(data.room.owner_key, 'VLD0:owner999', 'owner_key exported');
+  a.equal(data.room.owner_secret, 'VLD0:secret999', 'owner_secret exported');
+  a.equal(data.encryption_key, 'VLD0:enc999', 'encryption_key exported');
+});
+
+t.test('import: round-trip preserves owner credentials and encryption key', async (a) => {
+  const exported = await call('exportRoom', { roomId: 'room-2' });
+  // Mutate the room id so we import as a new room
+  exported.room.id = 'room-2-reimport';
+  const result = await call('importRoom', { data: exported });
+  a.equal(result.roomId, 'room-2-reimport');
+
+  const room = await call('getRoom', { roomId: 'room-2-reimport' });
+  a.equal(room.owner_key, 'VLD0:owner999', 'owner_key preserved');
+  a.equal(room.owner_secret, 'VLD0:secret999', 'owner_secret preserved');
+  a.equal(room.encryption_key, 'VLD0:enc999', 'encryption_key preserved');
+});
+
 t.test('export: returns null for nonexistent room', async (a) => {
   const data = await call('exportRoom', { roomId: 'nonexistent' });
   a.equal(data, null);
