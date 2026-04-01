@@ -110,7 +110,7 @@ Peer A (initiator)                    Peer B (joiner)
 
 - **Room code:** 4 uppercase letters (e.g. `FOXR`), generated randomly by the initiator.
 - **URL format:** `https://peer-drop.apps.andymolenda.com#FOXR` — the hash fragment IS the room code.
-- **PeerJS peer IDs:** Initiator registers as `drop-FOXR-host`. Joiner connects to that ID.
+- **PeerJS peer IDs:** Initiator registers as `peerdrop-FOXR`. Joiner registers as `peerdrop-FOXR-XYZ` (random suffix) and connects to the host ID.
 - **One room = two peers.** Third connections are rejected with a message.
 - **Room lifetime:** Exists as long as the host tab is open.
 
@@ -143,8 +143,8 @@ Peer A (initiator)                    Peer B (joiner)
 { type: "file-accept", id: "<transfer-id>" }
 { type: "file-decline", id: "<transfer-id>" }
 
-// Data chunks (sent as ArrayBuffer with 4-byte transfer ID prefix)
-[4-byte id][chunk data]
+// Data chunks (JSON envelope with ArrayBuffer payload)
+{ type: "file-chunk", id: "<transfer-id>", index: 0, data: <ArrayBuffer> }
 
 // Completion
 { type: "file-complete", id: "<transfer-id>" }
@@ -191,45 +191,64 @@ Peer A (initiator)                    Peer B (joiner)
 
 ---
 
-## 6. Technical details
+## 6. Security hardening
 
-### 6.1 Dependencies (CDN only)
+The following mitigations are implemented to defend against a malicious peer:
+
+| Threat | Mitigation |
+|--------|-----------|
+| XSS via text messages | Text rendered via DOM API (`createElement`/`textContent`), never `innerHTML` |
+| XSS via transfer IDs | All peer-supplied IDs sanitized with `sanitizeId()` allowlist (`[a-zA-Z0-9_-]`) |
+| Memory exhaustion (huge file offer) | 500MB cap on `totalChunks`; oversized offers auto-declined |
+| Out-of-bounds chunk writes | Chunk `index` validated against `[0, totalChunks)` |
+| Clipboard API failure | Fallback to `document.execCommand('copy')` via temporary textarea |
+| 0-byte file abuse | Empty files filtered from send queue |
+
+**Not in scope:** Application-level E2E encryption beyond WebRTC's built-in DTLS. The threat model assumes a trusted or casual sharing context, not an adversarial one.
+
+---
+
+## 7. Technical details
+
+### 7.1 Dependencies (CDN only)
 
 | Library | Version | Purpose | CDN |
 |---------|---------|---------|-----|
 | PeerJS | 1.5.5 | WebRTC data connections | `cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js` |
 | qrcode-generator | latest | QR code rendering to canvas | `cdn.jsdelivr.net/npm/qrcode-generator` |
 
-### 6.2 File structure
+### 7.2 File structure
 
 ```
 projects/peer-drop/
-  index.html       # Entire application (HTML + CSS + JS)
+  index.html       # Entire application (HTML + CSS + JS, ~960 lines)
+  README.md        # Project overview
   docs/
     PRD.md          # This file
 ```
 
-### 6.3 Chunking strategy
+### 7.3 Chunking strategy
 
 ```javascript
 const CHUNK_SIZE = 64 * 1024; // 64KB
+const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB safety limit
 
 // Sender
 const buffer = await file.arrayBuffer();
 const totalChunks = Math.ceil(buffer.byteLength / CHUNK_SIZE);
 for (let i = 0; i < totalChunks; i++) {
   const chunk = buffer.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-  conn.send(chunk);
-  // Throttle: check conn.bufferSize, pause if backpressured
+  conn.send({ type: 'file-chunk', id, index: i, data: chunk });
+  // Backpressure: wait for data channel buffer to drain if >1MB queued
 }
 
 // Receiver
-const chunks = [];
-// Accumulate chunks, track progress
+const chunks = new Array(totalChunks);  // pre-allocated, indexed
+// On each chunk: chunks[index] = data; received++;
 // On complete: new Blob(chunks, { type: mimeType })
 ```
 
-### 6.4 Room code generation
+### 7.4 Room code generation
 
 ```javascript
 function generateCode(length = 4) {
@@ -242,7 +261,7 @@ function generateCode(length = 4) {
 
 Note: Excludes `I` and `O` to avoid confusion with `1` and `0`.
 
-### 6.5 Browser compatibility targets
+### 7.5 Browser compatibility targets
 
 - Chrome/Edge 80+
 - Firefox 80+
@@ -251,9 +270,9 @@ Note: Excludes `I` and `O` to avoid confusion with `1` and `0`.
 
 ---
 
-## 7. UI layout
+## 8. UI layout
 
-### 7.1 Wireframe (text)
+### 8.1 Wireframe (text)
 
 ```
 ┌──────────────────────────────────┐
@@ -295,14 +314,14 @@ Note: Excludes `I` and `O` to avoid confusion with `1` and `0`.
 └──────────────────────────────────┘
 ```
 
-### 7.2 Responsive behavior
+### 8.2 Responsive behavior
 
 - **Desktop (>600px):** Centered 600px container, drag-and-drop enabled.
 - **Mobile (<600px):** Full-width with 1rem padding. Drop zone becomes a prominent "Select Files" button. QR code scales down but remains scannable.
 
 ---
 
-## 8. Implementation checklist
+## 9. Implementation checklist
 
 ### Phase 1: MVP
 
