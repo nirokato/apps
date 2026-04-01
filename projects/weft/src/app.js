@@ -43,9 +43,9 @@ class DB {
     return this.call('createIdentity', { publicKey, displayName });
   }
   getRooms() { return this.call('getRooms'); }
-  createRoom(name, createdBy, dhtKey, ownerKey, ownerSecret, encryptionKey) {
+  createRoom(name, createdBy, dhtKey, ownerKey, ownerSecret, encryptionKey, mySubkey) {
     const id = ulid();
-    return this.call('createRoom', { id, name, createdBy, dhtKey, ownerKey, ownerSecret, encryptionKey });
+    return this.call('createRoom', { id, name, createdBy, dhtKey, ownerKey, ownerSecret, encryptionKey, mySubkey });
   }
   getRoom(roomId) { return this.call('getRoom', { roomId }); }
   getTopics(roomId) { return this.call('getTopics', { roomId }); }
@@ -320,8 +320,9 @@ async function publishPresence() {
       state.currentRoom.owner_secret || null
     );
 
-    // Write presence to subkey 1 (owner's presence subkey)
-    await veilid.writePresence(state.currentRoom.dht_key, 1, {
+    // Write presence to our allocated subkey (1=creator, 2+=other members)
+    const subkey = state.currentRoom.my_subkey || 1;
+    await veilid.writePresence(state.currentRoom.dht_key, subkey, {
       v: 1,
       display_name: state.identity?.display_name || '',
       public_key: state.identity?.public_key || '',
@@ -502,7 +503,7 @@ const handlers = {
         }
       }
 
-      const room = await db.createRoom(name, state.identity.public_key, dhtKey, ownerKey, ownerSecret, encryptionKey);
+      const room = await db.createRoom(name, state.identity.public_key, dhtKey, ownerKey, ownerSecret, encryptionKey, 1);
       await db.updateMemberName(room.id, state.identity.public_key, state.identity.display_name);
       const rooms = await db.getRooms();
       await handlers.enterRoom(room.id);
@@ -534,13 +535,26 @@ const handlers = {
 
       const meta = dhtResult.metadata;
 
+      // Derive presence subkey from position in member_keys (index + 1, subkey 0 is metadata)
+      let mySubkey = 1;
+      if (meta.member_keys) {
+        const idx = meta.member_keys.indexOf(state.identity.public_key);
+        if (idx >= 0) {
+          mySubkey = idx + 1;
+        } else {
+          // Not yet in member_keys — next available slot
+          mySubkey = meta.member_keys.length + 1;
+        }
+      }
+
       // Create room locally
       const room = await db.createRoom(
         meta.name || 'Unnamed Room',
         meta.created_by || '',
         dhtKey.trim(),
         '', '', // no owner key/secret for joiners
-        encryptionKey.trim()
+        encryptionKey.trim(),
+        mySubkey
       );
 
       // Add self as member

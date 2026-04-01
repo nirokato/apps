@@ -110,12 +110,44 @@ t.test('rooms: createRoom without DHT fields defaults to empty', async (a) => {
   a.equal(room.encryption_key, '');
 });
 
+// ============================================================
+// Subkey Allocation (BUG-4 fix)
+// ============================================================
+
+t.test('subkey: creator room defaults my_subkey to 1', async (a) => {
+  const room = await call('getRoom', { roomId: 'room-1' });
+  a.equal(room.my_subkey, 1, 'default subkey is 1 (creator)');
+});
+
+t.test('subkey: createRoom with explicit mySubkey stores it', async (a) => {
+  const room = await call('createRoom', {
+    id: 'room-subkey-2', name: 'Joiner Room', createdBy: 'VLD0:joiner1',
+    dhtKey: 'VLD0:dhtJoin', mySubkey: 2
+  });
+  a.equal(room.my_subkey, 2, 'subkey 2 for second member');
+});
+
+t.test('subkey: createRoom with mySubkey=3 for third member', async (a) => {
+  const room = await call('createRoom', {
+    id: 'room-subkey-3', name: 'Third Member Room', createdBy: 'VLD0:joiner2',
+    dhtKey: 'VLD0:dhtJoin2', mySubkey: 3
+  });
+  a.equal(room.my_subkey, 3, 'subkey 3 for third member');
+});
+
+t.test('subkey: createRoom without mySubkey defaults to 1', async (a) => {
+  const room = await call('createRoom', {
+    id: 'room-subkey-default', name: 'Default Subkey Room', createdBy: 'VLD0:owner1'
+  });
+  a.equal(room.my_subkey, 1, 'defaults to 1 when not specified');
+});
+
 t.test('rooms: getRooms returns rooms in DESC created_at order', async (a) => {
   const rooms = await call('getRooms');
-  a.equal(rooms.length, 2);
-  // room-2 was created after room-1
-  a.equal(rooms[0].id, 'room-2');
-  a.equal(rooms[1].id, 'room-1');
+  a.ok(rooms.length >= 2, 'at least 2 rooms');
+  // room-2 was created after room-1, both should appear before other test rooms
+  const ids = rooms.map(r => r.id);
+  a.ok(ids.indexOf('room-2') < ids.indexOf('room-1'), 'room-2 before room-1');
 });
 
 t.test('rooms: getRoom returns null for unknown id', async (a) => {
