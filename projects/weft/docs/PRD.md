@@ -701,7 +701,8 @@ All `CLAUDE.md` updates have been applied:
 - [x] Create a room (generates DHT record + symmetric key) — live-tested, real DHT key on network
 - [x] Join a room (open DHT record, read metadata) — live-tested
 - [x] AppMessage send/receive — loopback verified
-- [x] WSS transport resolved — veilid-server serves WSS, WASM reaches OverAttached
+- [x] WSS bootstrap works from HTTPS — direct to Andy's WSS veilid-server
+- [ ] WSS persistent peer connection — **blocked** (bootstrap is one-shot, see step 20c)
 - [ ] Real-time message delivery to remote peer (two-peer test, step 22)
 - [x] Post messages with a topic string
 - [x] View messages grouped by topic (topic-river layout)
@@ -819,12 +820,18 @@ Recommended order of implementation for Claude Code Web:
 20. ~~Implement AppMessage send/receive for real-time messages (loopback test passes)~~
     - Fixed createPrivateRoute: camelCase `routeId` field, cache own route
     - Fixed sendAppMessage: wrap RouteId in serde Target enum `{ RouteId: rid }`
-20b. ~~**RESOLVED: WSS transport** — veilid-server rebuilt with WSS, direct TLS on port 5150~~
+20b. ~~**PARTIALLY RESOLVED: WSS transport** — server rebuilt with WSS, works on HTTP~~
     - Built from source with `enable-protocol-wss` + `async-tls` dep fix (musl static binary)
     - RSA 2048 cert via acme.sh, Cloudflare tunnel removed, direct A record DNS
-    - WASM client reaches OverAttached with Andy's node as relay
-    - See: [docs/wss-transport-blockers.md](wss-transport-blockers.md) for full history
-21. Implement presence updates in DHT subkeys ← **NEXT**
+    - WASM client reaches OverAttached on `http://localhost` (with hosts file override)
+20c. **BLOCKER: Bootstrap is one-shot, no persistent WSS peer connection** ← **CURRENT**
+    - Bootstrap via WSS works (B01T response in ~1s from HTTPS pages)
+    - But the WSS connection closes after bootstrap — no persistent peer link
+    - After bootstrap, WASM tries to connect to discovered peers via `ws://` → blocked on HTTPS
+    - Need to establish persistent WSS peer connection to Andy's node after bootstrap
+    - Chicken-and-egg: need WSS peer to join network, can only discover WSS peers from network
+    - See: [docs/wss-transport-blockers.md](wss-transport-blockers.md) for full analysis
+21. Implement presence updates in DHT subkeys (after WSS peer connection resolved)
 22. Test: two browser tabs can exchange messages in real-time
 
 ### Phase 4: Sync — NOT STARTED
