@@ -1,7 +1,7 @@
 # WSS Transport Blockers — WASM ↔ Veilid Network
 
 **Date:** 2026-04-02
-**Status:** RESOLVED — veilid-server rebuilt with WSS support, direct TLS on port 5150
+**Status:** PARTIALLY RESOLVED — WSS bootstrap works, but persistent peer connection gap remains
 
 ---
 
@@ -114,6 +114,57 @@ Bootstrap: Direct bootstrap v1 response with full peer info
 ```
 
 No mixed content errors. WASM client fully connected with Andy's node as relay.
+
+**IMPORTANT: This only works on `http://localhost` (no mixed content restrictions).** See "Remaining Gap" below.
+
+---
+
+## Remaining Gap: Bootstrap ≠ Persistent Peer Connection
+
+**Status:** BLOCKING — this is the current open issue as of 2026-04-02.
+
+### The Problem
+
+WSS bootstrap to Andy's node works perfectly — the WASM client sends B01T, gets a full bootstrap response with peer info in ~1 second. But **the bootstrap WebSocket connection is one-shot**: connect, send magic bytes, receive response, close.
+
+After bootstrap, the WASM client has a list of peers (the official bootstrap nodes). It tries to connect to those peers using their advertised dial info — which is all `ws://`. From HTTPS pages, these connections are blocked by mixed content. The client never establishes a persistent connection to any peer, so it never reaches `AttachedWeak`.
+
+### Why It Worked on localhost
+
+On `http://localhost:8000` (no TLS), the WASM client:
+1. Bootstraps via WSS to Andy's node ✅
+2. Connects to official bootstrap peers via `ws://` ✅ (no mixed content on HTTP pages)
+3. Through those peers, discovers Andy's WSS-capable node in the routing table
+4. Establishes persistent WSS connection to Andy's node
+5. Andy's node becomes the relay → OverAttached
+
+On `https://weft.apps.andymolenda.com` (HTTPS), step 2 fails — all `ws://` connections blocked.
+
+### What Was Tested
+
+- **Ares (localhost:8000):** OverAttached ✅ (with `/etc/hosts` override for hairpin NAT)
+- **Ares (weft.apps.andymolenda.com):** Bootstrap succeeds, never attaches ❌ (hairpin NAT + missing persistent peer connection)
+- **Android phone on cellular (weft.apps.andymolenda.com):** Bootstrap succeeds via WSS from public internet, never attaches ❌ (same gap — no persistent WSS peer connection after bootstrap)
+
+### Potential Fixes
+
+1. **Establish persistent WSS connection to bootstrap node after bootstrap completes.** After the one-shot B01T request, reconnect to the same WSS endpoint as a Veilid peer connection (not bootstrap). This would require changes to veilid-worker.js or possibly veilid-core to treat the bootstrap node as a persistent peer.
+
+2. **Add Andy's node as a hardcoded peer.** After bootstrap, inject Andy's node's PeerInfo (with WSS dial info) directly into the routing table. The WASM client would then connect to it as a regular peer via WSS.
+
+3. **Modify the bootstrap response.** Make Andy's veilid-server include its own signed PeerInfo (with WSS dial info) in the bootstrap response's `peers` array, in addition to the official bootstrap nodes. The WASM client would then know about a WSS-capable peer from the start.
+
+4. **Use the `bootstrap_keys` config.** Veilid's config has a `bootstrap_keys` setting that may allow specifying trusted bootstrap peer keys. If Andy's node's key is in this list, the WASM client might maintain a connection to it.
+
+Option 3 is the most elegant — the bootstrap response already has a `peers` array with signed PeerInfo. If Andy's node included itself there, the WASM client would have immediate knowledge of a WSS peer and could connect.
+
+### Why the Veilid Internal Connection Manager Matters
+
+The WASM client doesn't manually open WebSocket connections — Veilid's internal `ConnectionManager` handles all peer connections. When it sees a peer with `ws://` dial info from an HTTPS context, it silently fails. It needs to see `wss://` dial info for at least one peer to establish any connection at all.
+
+Andy's node advertises `wss://` dial info to the Veilid network, but the WASM client only learns about peers through the bootstrap response — which only contains the official bootstrap nodes (all `ws://` only). The WASM client never discovers Andy's WSS-capable node because it can't connect to any peer to query the routing table.
+
+This is a chicken-and-egg problem: need a WSS peer to join the network, but can only discover WSS peers by being on the network.
 
 ---
 

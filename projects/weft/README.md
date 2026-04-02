@@ -29,11 +29,14 @@ Messages are organized into **rooms** containing **topics** (threads). Each topi
 - Per-room presence subkey allocation
 - CRDT merge: independent databases converge via `crsql_changes`
 
-**WSS transport: RESOLVED** — see [docs/wss-transport-blockers.md](docs/wss-transport-blockers.md) for the full journey.
+**WSS transport: PARTIALLY RESOLVED** — see [docs/wss-transport-blockers.md](docs/wss-transport-blockers.md) for the full journey.
 
-Andy's veilid-server rebuilt from source with `enable-protocol-wss`, serving WSS on port 5150 with a Let's Encrypt cert. WASM client bootstraps directly via `wss://veilid.andymolenda.com:5150/ws`, reaches OverAttached, with the node acting as relay to the rest of the network.
+Andy's veilid-server rebuilt from source with `enable-protocol-wss`, serving WSS on port 5150 with a Let's Encrypt cert. Bootstrap via WSS works from HTTPS pages. On `http://localhost`, reaches OverAttached with the node as relay. On HTTPS, bootstrap succeeds but the one-shot connection closes — the WASM client can't establish a persistent peer connection because all discovered peers only advertise `ws://` (blocked by mixed content).
+
+**Current blocker:** Bootstrap is one-shot — need persistent WSS peer connection to Andy's node after bootstrap completes. See step 20c in PRD.
 
 **What's next:**
+- Resolve persistent WSS peer connection gap (step 20c)
 - Two-peer messaging test (PRD step 22)
 - End-to-end encryption (AEAD primitives are wired, not yet applied to messages)
 - Presence indicators via DHT subkeys
