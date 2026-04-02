@@ -129,20 +129,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Find changed projects
         id: scan
         run: |
-          # Get list of changed files in this push
-          changed=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} 2>/dev/null || echo "")
-
-          # If we can't diff (first push, force push), deploy all
-          if [ -z "$changed" ]; then
-            changed=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "projects/")
-          fi
+          # Diff against parent commit (fetch-depth: 2 guarantees HEAD~1 exists)
+          changed=$(git diff --name-only HEAD~1 HEAD)
+          echo "Changed files:"
+          echo "$changed"
 
           # Extract unique project names from changed paths
-          projects=$(echo "$changed" | grep '^projects/' | cut -d'/' -f2 | sort -u)
+          projects=$(echo "$changed" | grep '^projects/' | cut -d'/' -f2 | sort -u || true)
 
           # If no projects changed (only tofu/workflow/docs changes), deploy nothing
           if [ -z "$projects" ]; then
@@ -158,7 +157,7 @@ jobs:
             fi
           done | jq -s -c '{project: .}')
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-          echo "Deploying changed projects: $projects"
+          echo "Deploying: $projects"
 
   deploy:
     name: Deploy ${{ matrix.project.name }}
