@@ -700,7 +700,8 @@ All `CLAUDE.md` updates have been applied:
 - [x] cr-sqlite boots in browser, creates schema, persists to IndexedDB
 - [x] Create a room (generates DHT record + symmetric key) — live-tested, real DHT key on network
 - [x] Join a room (open DHT record, read metadata) — live-tested
-- [ ] Real-time message delivery via AppMessage
+- [x] AppMessage send/receive — loopback verified
+- [ ] Real-time message delivery to remote peer — **blocked by WSS transport** (see [docs/wss-transport-blockers.md](docs/wss-transport-blockers.md))
 - [x] Post messages with a topic string
 - [x] View messages grouped by topic (topic-river layout)
 - [x] Topics sorted by most recent activity
@@ -814,8 +815,16 @@ Recommended order of implementation for Claude Code Web:
 19. ~~Implement DHT record opening for room joins (live-tested: all 6 DHT tests pass)~~
     - Fixed KeyPair parsing: accept separate ownerKey/ownerSecret, construct via `KeyPair.newFromParts()`
     - API changed: `openRoomDHT({ dhtKey, ownerKey, ownerSecret })` instead of `ownerKeyPair` string
-20. Implement AppMessage send/receive for real-time messages ← **NEXT**
-21. Implement presence updates in DHT subkeys
+20. ~~Implement AppMessage send/receive for real-time messages (loopback test passes)~~
+    - Fixed createPrivateRoute: camelCase `routeId` field, cache own route
+    - Fixed sendAppMessage: wrap RouteId in serde Target enum `{ RouteId: rid }`
+20b. **BLOCKER: WSS transport** — remote peer connections fail from HTTPS pages (mixed content)
+    - All Veilid network peers only advertise `ws://` dial info
+    - `enable-protocol-wss` is not default in veilid-server Debian packages
+    - Fix: rebuild veilid-server with `--features enable-protocol-wss`, deploy with TLS cert
+    - TLS cert already provisioned (acme.sh + Cloudflare DNS challenge)
+    - See: [docs/wss-transport-blockers.md](wss-transport-blockers.md) for full analysis
+21. Implement presence updates in DHT subkeys ← **NEXT** (after WSS blocker resolved)
 22. Test: two browser tabs can exchange messages in real-time
 
 ### Phase 4: Sync — NOT STARTED

@@ -19,22 +19,26 @@ Messages are organized into **rooms** containing **topics** (threads). Each topi
 - Create rooms and topic threads
 - Post and read messages with cr-sqlite persistence
 - Search messages across topics
-- Export/import rooms as JSON for backup or sharing
+- Export/import rooms as JSON (including DHT credentials)
 - Veilid WASM boots with WSS support (compiled with `enable-protocol-wss`)
 - Bootstraps to Veilid network via WSS proxy (Cloudflare Tunnel → nginx → official bootstrap)
-- Network attachment: AttachedWeak / PublicInternet ready
+- Network attachment: reaches OverAttached
 - Identity generation and persistence
-- DHT record creation, room joining via DHT key invite
-- Real-time P2P message delivery via Veilid AppMessage
-- Peer route exchange (join/welcome handshake)
+- DHT record creation and opening (live-tested on real network)
+- AppMessage send/receive (loopback verified)
+- Per-room presence subkey allocation
 - CRDT merge: independent databases converge via `crsql_changes`
 
+**Known blocker: WSS transport** — see [docs/wss-transport-blockers.md](docs/wss-transport-blockers.md)
+
+The WASM client bootstraps and attaches to the network, but cannot connect to remote peers from HTTPS pages because all Veilid nodes only advertise `ws://` dial info (blocked as mixed content). Fix: build veilid-server with `enable-protocol-wss` and deploy with TLS cert. Infrastructure (cert, config) is in place — only the binary rebuild is needed.
+
 **What's next:**
-- DHT record creation for rooms (Phase 3, step 18)
+- Build veilid-server with `enable-protocol-wss` (TLS cert already provisioned)
+- Two-peer messaging test (PRD step 22)
 - End-to-end encryption (AEAD primitives are wired, not yet applied to messages)
 - Presence indicators via DHT subkeys
 - cr-sqlite changeset sync via Veilid AppCall (reliable catch-up)
-- Periodic sync and offline queue
 
 ## Architecture
 
