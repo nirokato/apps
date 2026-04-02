@@ -15,27 +15,69 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      padding: 2rem 1rem;
     }
-    .container { max-width: 600px; padding: 2rem; }
-    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+    .container { max-width: 480px; width: 100%; }
+    h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
     h1 .accent { color: #c4a24e; }
-    p { color: #9a9686; font-size: 0.9rem; margin-bottom: 1.5rem; }
-    a { color: #c4a24e; text-decoration: none; font-weight: 600; }
-    a:hover { text-decoration: underline; }
-    .back { font-size: 0.85rem; color: #9a9686; }
-    .back a { color: #9a9686; font-weight: 400; }
+    .subtitle { color: #9a9686; font-size: 0.85rem; margin-bottom: 0.5rem; }
+    .repo {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      margin-bottom: 1.75rem;
+    }
+    .repo a { color: #9a9686; font-weight: 400; text-decoration: none; }
+    .repo a:hover { color: #c4a24e; }
+
+    .projects { list-style: none; display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 2rem; }
+    .project {
+      display: block;
+      padding: 0.875rem 1rem;
+      background: #1a1a16;
+      border: 1px solid #2a2a24;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: border-color 0.15s;
+    }
+    .project:hover { border-color: #c4a24e; text-decoration: none; }
+    .project-name {
+      color: #c4a24e;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    .project-desc {
+      color: #9a9686;
+      font-size: 0.8rem;
+      margin-top: 0.2rem;
+      line-height: 1.4;
+    }
+
+    .back { font-size: 0.8rem; }
+    .back a { color: #9a9686; text-decoration: none; font-weight: 400; }
+    .back a:hover { color: #c4a24e; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>apps<span class="accent">.</span>andymolenda<span class="accent">.</span>com</h1>
-    <p>Side projects and experiments.</p>
-    <p style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;"><a href="https://github.com/nirokato/apps" style="font-weight:400;">github.com/nirokato/apps</a></p>
-    <ul style="list-style:none; margin-bottom:1.5rem;">
-      <li><a href="https://clock.apps.andymolenda.com">clock</a> &mdash; <span style="color:#9a9686;font-size:0.9rem;">world clock across timezones</span></li>
-      <li><a href="https://weft.apps.andymolenda.com">weft</a> &mdash; <span style="color:#9a9686;font-size:0.9rem;">local-first topic-threaded P2P chat</span></li>
-      <li><a href="https://peer-drop.apps.andymolenda.com">peer-drop</a> &mdash; <span style="color:#9a9686;font-size:0.9rem;">P2P file and text sharing between devices</span></li>
+    <p class="subtitle">Side projects and experiments.</p>
+    <p class="repo"><a href="https://github.com/nirokato/apps">github.com/nirokato/apps</a></p>
+
+    <ul class="projects">
+      <li><a class="project" href="https://peer-drop.apps.andymolenda.com">
+        <div class="project-name">peer-drop</div>
+        <div class="project-desc">P2P file and text sharing between devices</div>
+      </a></li>
+      <li><a class="project" href="https://weft.apps.andymolenda.com">
+        <div class="project-name">weft</div>
+        <div class="project-desc">Local-first topic-threaded P2P chat</div>
+      </a></li>
+      <li><a class="project" href="https://clock.apps.andymolenda.com">
+        <div class="project-name">clock</div>
+        <div class="project-desc">World clock across timezones</div>
+      </a></li>
     </ul>
+
     <p class="back"><a href="https://andymolenda.com">&larr; andymolenda.com</a></p>
   </div>
 </body>

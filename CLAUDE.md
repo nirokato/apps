@@ -80,7 +80,10 @@ Every project page must include:
 When adding a project to the homepage, follow this exact pattern:
 
 ```html
-<li><a href="https://<name>.apps.andymolenda.com"><name></a> &mdash; <span style="color:#9a9686;font-size:0.9rem;">short description</span></li>
+<li><a class="project" href="https://<name>.apps.andymolenda.com">
+  <div class="project-name"><name></div>
+  <div class="project-desc">Short description</div>
+</a></li>
 ```
 
 ## Tech stack & conventions
