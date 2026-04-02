@@ -107,11 +107,11 @@ async function initVeilid() {
   debugLog('[veilid-worker] Default WS config: ' + JSON.stringify(config.network.protocol.ws));
   debugLog('[veilid-worker] Default WSS config: ' + JSON.stringify(config.network.protocol.wss || 'NOT PRESENT'));
 
-  // Default bootstrap uses ws:// which is blocked on HTTPS pages (mixed content).
-  // URL format triggers "Direct bootstrap" (direct WSS connection).
-  // Dial-info format (wss|0.0.0.0|...) triggers "TXT bootstrap" (DNS TXT lookup) which fails.
-  config.network.routingTable.bootstrap = ['wss://veilid.andymolenda.com/ws'];
-  debugLog('[veilid-worker] Overriding bootstrap with WSS URL: ' + JSON.stringify(config.network.routingTable.bootstrap));
+  // Bootstrap directly to Andy's WSS-enabled veilid-server.
+  // Must use wss:// (not ws://) from HTTPS pages to avoid mixed content blocking.
+  // Port 5150 is the standard Veilid port, forwarded through the firewall.
+  config.network.routingTable.bootstrap = ['wss://veilid.andymolenda.com:5150/ws'];
+  debugLog('[veilid-worker] Bootstrap: ' + JSON.stringify(config.network.routingTable.bootstrap));
 
   // WS/WSS: connect only, no listen (WASM can't accept incoming)
   config.network.protocol.ws.connect = true;
