@@ -1,7 +1,7 @@
 # WSS Transport Blockers — WASM ↔ Veilid Network
 
 **Date:** 2026-04-02
-**Status:** Blocking — must be resolved before two-peer messaging works from HTTPS-hosted weft
+**Status:** RESOLVED — veilid-server rebuilt with WSS support, direct TLS on port 5150
 
 ---
 
@@ -103,66 +103,89 @@ Once the server advertises WSS, update the WASM client's bootstrap to include th
 2. Connect to Andy's node via `wss://veilid.andymolenda.com:5150/ws` (direct WSS)
 3. Andy's node relays to the rest of the network via UDP/TCP
 
-### Step 3: Verify end-to-end
+### Step 3: Verify end-to-end ✅
 
-- Two browser tabs on `https://weft.apps.andymolenda.com`
-- Both bootstrap, both connect to Andy's WSS node
-- Create room in tab A, join in tab B
-- Send messages, verify they arrive via AppMessage through the relay
+Headless Chromium test from `http://localhost:8000`:
+```
+Attachment: Attaching → AttachedWeak → AttachedGood → AttachedStrong → FullyAttached → OverAttached
+Outbound protocols: EnumSet(WS | WSS)
+Relays: [VLD0:OTV5wNauJK4_ufEreqk9wJjHdWrJTjpOOWAVQCWDLx4] (Andy's node)
+Bootstrap: Direct bootstrap v1 response with full peer info
+```
 
----
-
-## Alternative Approaches (if WSS build doesn't work)
-
-### WebRTC Hybrid
-Keep Veilid for identity, DHT, and crypto. Use WebRTC data channels (like peer-drop) for browser-to-browser message transport. The DHT stores signaling info instead of Veilid route blobs.
-
-**Pros:** Already proven (peer-drop works), no TLS cert issues
-**Cons:** Adds WebRTC complexity, loses Veilid's privacy routing
-
-### WebTransport (future)
-WebTransport supports self-signed certs via `serverCertificateHashes`. If Veilid added WebTransport support, browser nodes could connect to any peer without CA certificates. This is the best long-term P2P answer but requires Veilid protocol changes.
-
-### Tauri Wrapper
-Wrap weft in Tauri for a native app. No mixed content restrictions, full network access. Loses the "just a URL" simplicity.
-
-### HTTP-Only Deployment
-Serve weft from `http://` instead of HTTPS. Only viable for local network use. Loses secure context APIs.
+No mixed content errors. WASM client fully connected with Andy's node as relay.
 
 ---
 
-## Infrastructure Reference
+## Resolution Details
+
+### What was needed to fix the WSS blocker
+
+1. **Rebuild veilid-server with `enable-protocol-wss`** — the Debian nightly package doesn't include it
+2. **Add `async-tls` as a direct dependency** in `veilid-core/Cargo.toml` — WSS code imports it directly but it was only a transitive dep via `async-tungstenite`
+3. **Fix compilation errors** in `start_protocols.rs` and `mod.rs`:
+   - Add `.await` to `start_wss_listeners()` call (async fn called without await)
+   - Remove `.await` from `convert_listen_address_to_bind_set()` and `start_tcp_listener()` (sync fns with spurious await)
+   - Remove `async` from `register_wss_dial_info` (declared async but no awaits inside)
+4. **Use async-std runtime** (`--no-default-features --features 'default-async-std,enable-protocol-wss'`) — WSS TLS code uses `async-tls` which is async-std, not tokio
+5. **Build with musl target** (`x86_64-unknown-linux-musl`) — Arch container has glibc 2.43, Debian node has 2.36
+6. **Issue RSA cert** (not ECDSA) — veilid's rustls config failed with EC keys
+7. **Include port in WSS URL** — `wss://veilid.andymolenda.com:5150/ws` not `wss://veilid.andymolenda.com/ws` (veilid panics on missing port)
+8. **DNS: A record** pointing directly at public IP (50.37.118.208), DNS-only (not proxied), replacing Cloudflare tunnel CNAME
+9. **Cloudflare tunnel removed** — no longer needed, direct WSS to veilid-server
+
+### What can be cleaned up
+
+- nginx on 192.168.0.11 — no longer needed (was proxying bootstrap to official node)
+- cloudflared package — can be uninstalled
+- The `/etc/hosts` override on ares (`192.168.0.11 veilid.andymolenda.com`) is needed for hairpin NAT
+
+---
+
+## Infrastructure Reference (current)
 
 ### Veilid Node (192.168.0.11)
 
 ```
-veilid-server v0.5.3 (Debian nightly, WITHOUT enable-protocol-wss)
-Port: 5150 (UDP/TCP/WS, multiplexed)
-Public IP: 50.37.118.208 (port-forwarded)
-NAT type: FullConeNAT (UDP), PortRestrictedNAT (TCP/WS)
-Peers: ~30-40 active connections
+veilid-server v0.5.3 (custom build: async-std + enable-protocol-wss, musl static binary)
+Binary: /usr/bin/veilid-server (backup: /usr/bin/veilid-server.bak = original Debian nightly)
+Port: 5150 (UDP/TCP/WS/WSS, multiplexed — TLS auto-detected via first byte 0x16)
+Public IP: 50.37.118.208 (port-forwarded through home router)
+DNS: veilid.andymolenda.com → 50.37.118.208 (A record, DNS-only, not proxied)
+NAT type: FullConeNAT (UDP), varies for TCP/WS
+Protocols: UDP, TCP, WS, WSS (all on port 5150)
 Capabilities: ROUT, SGNL, RLAY, DIAL, DHTV, APPM
+Advertised WSS: Direct:wss|50.37.118.208|veilid.andymolenda.com:5150/ws
 ```
 
 ### TLS Certificate
 
 ```
-Issuer: ZeroSSL ECC DV SSL CA 2 (via acme.sh)
+Issuer: ZeroSSL RSA DV SSL CA 2 (via acme.sh + Cloudflare DNS challenge)
+Key type: RSA 2048 (not ECDSA — rustls in veilid failed with EC keys)
 Domain: veilid.andymolenda.com
-Validity: 2026-04-02 to 2026-07-01 (90 days)
+Validity: 2026-04-02 to 2026-07-01 (90 days, auto-renewable)
 Cert: /etc/veilid-server/ssl/fullchain.crt
 Key: /etc/veilid-server/ssl/server.key
-Renewal: acme.sh --cron (needs systemd timer, no cron on node)
+Renewal: ~/.acme.sh/acme.sh --cron (needs systemd timer — no cron on node)
+DNS challenge token: apps-deploy Cloudflare API token (Zone:DNS:Edit)
 ```
 
-### nginx WSS Proxy (bootstrap only)
+### Build Environment (nspawn container 'veilid-build' on ares)
 
 ```
-Listen: 127.0.0.1:5151
-Proxies /ws to: bootstrap-v1.veilid.net:5150/ws (official bootstrap)
-Cloudflare Tunnel routes wss://veilid.andymolenda.com → ws://127.0.0.1:5151
-Purpose: Provides WSS bootstrap for WASM clients on HTTPS pages
-NOTE: This only handles bootstrap requests (BOOT/B01T magic), NOT ongoing peer connections
+Source: /home/coder/veilid (cloned from gitlab.com/veilid/veilid, tag v0.5.3)
+Patches applied:
+  - veilid-core/Cargo.toml: added async-tls = "0.13" as direct dependency
+  - start_protocols.rs: removed spurious .await on sync fns, removed async on register_wss_dial_info
+  - native/mod.rs: added .await on start_wss_listeners() call
+
+Server build command:
+  cargo build --release --target x86_64-unknown-linux-musl \
+    --no-default-features --features 'default-async-std,enable-protocol-wss'
+
+WASM build command:
+  cd veilid-wasm && wasm-pack build --release --target web -- --features enable-protocol-wss
 ```
 
 ### WASM Build
@@ -183,12 +206,16 @@ Location: projects/weft/wasm/veilid/
 
 2. **Veilid multiplexes protocols on one port.** Port 5150 handles UDP, TCP, WS, and WSS. TLS is auto-detected by checking if the first byte is `0x16` (TLS ClientHello).
 
-3. **Bootstrap ≠ peer connection.** Our WSS proxy handles bootstrap (HTTP-level WebSocket with BOOT/B01T magic). But post-bootstrap peer connections are Veilid protocol-level and go directly to each peer's advertised dial info.
+3. **Bootstrap and peer connections are the same in WSS mode.** With WSS-enabled veilid-server, the WASM client bootstraps directly to the server AND maintains an ongoing peer connection. The server responds to BOOT/B01T and also serves as a relay. No need for a separate bootstrap proxy.
 
-4. **Veilid nodes do NOT respond to BOOT/B01T over WebSocket.** Only the official bootstrap servers handle bootstrap requests. Regular nodes handle Veilid protocol envelopes.
+4. **Veilid's WSS code has compilation bugs on v0.5.3.** The `async-tls` crate is imported but not declared as a direct dependency. Several functions have async/await mismatches. These had to be patched locally.
 
-5. **The Veilid relay system exists** (`RLAY` capability) but doesn't help if the WASM client can't reach any relay over WSS in the first place.
+5. **RSA certs required.** Veilid's rustls config fails silently with ECDSA/EC keys — must use RSA.
 
-6. **DHTSchema uses serde externally-tagged enums** (`{SMPL: {oCnt: 1, ...}}` not `{kind: 'SMPL', ...}`) and camelCase field names when compiled with `json-camel-case`.
+6. **WSS URL must include port.** `wss://host/ws` causes a panic (missing port in URL parsing). Must be `wss://host:5150/ws`.
 
-7. **WASM Worker polyfills needed:** `Window = self.constructor`, `window = self`, in-memory `localStorage` shim, `crypto` variable renamed to avoid shadowing `globalThis.crypto`.
+7. **The relay system works automatically.** Once the WASM client can reach a WSS node, Veilid's relay management assigns that node as its relay. Traffic flows: WASM client → WSS → your node → UDP/TCP → rest of network.
+
+8. **DHTSchema uses serde externally-tagged enums** (`{SMPL: {oCnt: 1, ...}}` not `{kind: 'SMPL', ...}`) and camelCase field names when compiled with `json-camel-case`.
+
+9. **WASM Worker polyfills needed:** `Window = self.constructor`, `window = self`, in-memory `localStorage` shim, `crypto` variable renamed to avoid shadowing `globalThis.crypto`.
