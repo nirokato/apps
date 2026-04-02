@@ -345,9 +345,18 @@ Note: Excludes `I` and `O` to avoid confusion with `1` and `0`.
 - [x] Mobile-responsive layout
 - [x] Error handling and edge cases
 
+### Phase 1.5: Performance & Resilience
+
+- [x] Multi-channel transfers (4 parallel data channels, round-robin chunk distribution)
+- [x] 256KB chunk size (up from 64KB) to reduce per-chunk overhead
+- [x] Backpressure via `bufferedAmountLowThreshold` callback (replaces setTimeout polling)
+- [x] Screen Wake Lock API (acquire on connect, release on disconnect, re-acquire on visibility)
+- [x] Resumable transfers (persist transfer state across disconnect, exchange resume state on reconnect)
+- [x] Ordered write buffer for FSAPI streaming with multi-channel out-of-order delivery
+
 ### Phase 2: Polish (post-MVP)
 
-- [ ] Wake Lock API during transfers
+- [x] Wake Lock API during transfers
 - [x] Transfer speed estimate
 - [ ] Sound/haptic on completion
 - [ ] Animated connection state transitions
