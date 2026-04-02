@@ -29,12 +29,11 @@ Messages are organized into **rooms** containing **topics** (threads). Each topi
 - Per-room presence subkey allocation
 - CRDT merge: independent databases converge via `crsql_changes`
 
-**Known blocker: WSS transport** — see [docs/wss-transport-blockers.md](docs/wss-transport-blockers.md)
+**WSS transport: RESOLVED** — see [docs/wss-transport-blockers.md](docs/wss-transport-blockers.md) for the full journey.
 
-The WASM client bootstraps and attaches to the network, but cannot connect to remote peers from HTTPS pages because all Veilid nodes only advertise `ws://` dial info (blocked as mixed content). Fix: build veilid-server with `enable-protocol-wss` and deploy with TLS cert. Infrastructure (cert, config) is in place — only the binary rebuild is needed.
+Andy's veilid-server rebuilt from source with `enable-protocol-wss`, serving WSS on port 5150 with a Let's Encrypt cert. WASM client bootstraps directly via `wss://veilid.andymolenda.com:5150/ws`, reaches OverAttached, with the node acting as relay to the rest of the network.
 
 **What's next:**
-- Build veilid-server with `enable-protocol-wss` (TLS cert already provisioned)
 - Two-peer messaging test (PRD step 22)
 - End-to-end encryption (AEAD primitives are wired, not yet applied to messages)
 - Presence indicators via DHT subkeys

@@ -701,7 +701,8 @@ All `CLAUDE.md` updates have been applied:
 - [x] Create a room (generates DHT record + symmetric key) — live-tested, real DHT key on network
 - [x] Join a room (open DHT record, read metadata) — live-tested
 - [x] AppMessage send/receive — loopback verified
-- [ ] Real-time message delivery to remote peer — **blocked by WSS transport** (see [docs/wss-transport-blockers.md](docs/wss-transport-blockers.md))
+- [x] WSS transport resolved — veilid-server serves WSS, WASM reaches OverAttached
+- [ ] Real-time message delivery to remote peer (two-peer test, step 22)
 - [x] Post messages with a topic string
 - [x] View messages grouped by topic (topic-river layout)
 - [x] Topics sorted by most recent activity
@@ -818,13 +819,12 @@ Recommended order of implementation for Claude Code Web:
 20. ~~Implement AppMessage send/receive for real-time messages (loopback test passes)~~
     - Fixed createPrivateRoute: camelCase `routeId` field, cache own route
     - Fixed sendAppMessage: wrap RouteId in serde Target enum `{ RouteId: rid }`
-20b. **BLOCKER: WSS transport** — remote peer connections fail from HTTPS pages (mixed content)
-    - All Veilid network peers only advertise `ws://` dial info
-    - `enable-protocol-wss` is not default in veilid-server Debian packages
-    - Fix: rebuild veilid-server with `--features enable-protocol-wss`, deploy with TLS cert
-    - TLS cert already provisioned (acme.sh + Cloudflare DNS challenge)
-    - See: [docs/wss-transport-blockers.md](wss-transport-blockers.md) for full analysis
-21. Implement presence updates in DHT subkeys ← **NEXT** (after WSS blocker resolved)
+20b. ~~**RESOLVED: WSS transport** — veilid-server rebuilt with WSS, direct TLS on port 5150~~
+    - Built from source with `enable-protocol-wss` + `async-tls` dep fix (musl static binary)
+    - RSA 2048 cert via acme.sh, Cloudflare tunnel removed, direct A record DNS
+    - WASM client reaches OverAttached with Andy's node as relay
+    - See: [docs/wss-transport-blockers.md](wss-transport-blockers.md) for full history
+21. Implement presence updates in DHT subkeys ← **NEXT**
 22. Test: two browser tabs can exchange messages in real-time
 
 ### Phase 4: Sync — NOT STARTED
