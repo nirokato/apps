@@ -130,18 +130,39 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Scan projects directory
+      - name: Find changed projects
         id: scan
         run: |
-          matrix=$(ls -d projects/*/ | while read dir; do
-            name=$(basename "$dir")
-            echo "{\"name\":\"$name\",\"pages_project\":\"andy-apps-$name\",\"directory\":\"projects/$name\"}"
+          # Get list of changed files in this push
+          changed=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} 2>/dev/null || echo "")
+
+          # If we can't diff (first push, force push), deploy all
+          if [ -z "$changed" ]; then
+            changed=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "projects/")
+          fi
+
+          # Extract unique project names from changed paths
+          projects=$(echo "$changed" | grep '^projects/' | cut -d'/' -f2 | sort -u)
+
+          # If no projects changed (only tofu/workflow/docs changes), deploy nothing
+          if [ -z "$projects" ]; then
+            echo "matrix={\"project\":[]}" >> "$GITHUB_OUTPUT"
+            echo "No project files changed, skipping deploy"
+            exit 0
+          fi
+
+          # Build matrix from changed projects only
+          matrix=$(echo "$projects" | while read name; do
+            if [ -d "projects/$name" ]; then
+              echo "{\"name\":\"$name\",\"pages_project\":\"andy-apps-$name\",\"directory\":\"projects/$name\"}"
+            fi
           done | jq -s -c '{project: .}')
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "Deploying changed projects: $projects"
 
   deploy:
     name: Deploy ${{ matrix.project.name }}
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.discover.outputs.matrix != '{"project":[]}'
     needs: [infra, discover]
     runs-on: ubuntu-latest
     strategy:
