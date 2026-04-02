@@ -10,13 +10,14 @@ Monorepo for small projects hosted under **apps.andymolenda.com**. Each project 
 
 ```
 projects/
-  homepage/          # Landing page (serves apps.andymolenda.com)
-  clock/             # World clock across timezones
-  weft/              # Local-first topic-threaded P2P chat
-tofu/                # OpenTofu infrastructure (Cloudflare Pages + DNS)
+  homepage/              Landing page (serves apps.andymolenda.com)
+  clock/                 World clock across timezones
+  weft/                  Local-first topic-threaded P2P chat (Veilid + cr-sqlite)
+  peer-drop/             Browser-based P2P file and text sharing (WebRTC)
+tofu/                    OpenTofu infrastructure (Cloudflare Pages + DNS)
 .github/workflows/
-  deploy.yml         # Infrastructure (tofu plan/apply) + production deployment
-  claude.yml         # Claude Code GitHub Action (issue/PR triggers)
+  deploy.yml             Infrastructure (tofu plan/apply) + deploy changed projects
+  claude.yml             Claude Code GitHub Action (issue/PR triggers)
 ```
 
 ## Adding a new project
