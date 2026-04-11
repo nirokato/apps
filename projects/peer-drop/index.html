@@ -491,16 +491,23 @@
     }
 
     async function processQueue() {
-      if (outgoingQueue.length === 0) { sending = false; return; }
+      if (sending) return;
       sending = true;
-      const file = outgoingQueue.shift();
       try {
-        await sendFile(file);
-      } catch (err) {
-        console.error('Transfer failed:', err);
-        showError('Transfer failed: ' + (err.message || 'connection lost'));
+        while (outgoingQueue.length > 0) {
+          // Stop if disconnected — the queue head stays intact for after reconnect
+          if (!conn || !conn.open) return;
+          const file = outgoingQueue.shift();
+          try {
+            await sendFile(file);
+          } catch (err) {
+            console.error('Transfer failed:', err);
+            showError('Transfer failed: ' + (err.message || 'connection lost'));
+          }
+        }
+      } finally {
+        sending = false;
       }
-      processQueue();
     }
 
     // Backpressure: wait until a channel's buffer drains
@@ -509,11 +516,19 @@
       if (!dc || dc.bufferedAmount <= BUFFER_HIGH) return Promise.resolve();
       return new Promise(resolve => {
         dc.bufferedAmountLowThreshold = BUFFER_LOW;
-        const onLow = () => { dc.onbufferedamountlow = null; resolve(); };
-        dc.onbufferedamountlow = onLow;
-        // Fallback poll in case event doesn't fire
-        const poll = setInterval(() => {
-          if (!dc || dc.bufferedAmount <= BUFFER_LOW) { clearInterval(poll); dc.onbufferedamountlow = null; resolve(); }
+        let poll;
+        let settled = false;
+        const done = () => {
+          if (settled) return;
+          settled = true;
+          if (poll) clearInterval(poll);
+          dc.onbufferedamountlow = null;
+          resolve();
+        };
+        dc.onbufferedamountlow = done;
+        // Fallback poll in case the event doesn't fire (older PeerJS / detached dc)
+        poll = setInterval(() => {
+          if (!dc || dc.bufferedAmount <= BUFFER_LOW) done();
         }, 100);
       });
     }
@@ -1022,6 +1037,8 @@
         openTransferChannels();
         // After channels are ready (or immediately if none), exchange resume state
         setTimeout(() => sendResumeState(), 500);
+        // Restart queued sends that were paused by a prior disconnect
+        if (outgoingQueue.length > 0 && !sending) processQueue();
       });
 
       conn.on('data', handleControlData);
@@ -1069,7 +1086,13 @@
     }
 
     function acceptTransferChannel(incoming) {
-      const idx = incoming.metadata.index;
+      const idx = incoming.metadata && incoming.metadata.index;
+      if (!Number.isInteger(idx) || idx < 0 || idx >= NUM_CHANNELS) {
+        // Reject channels with bogus indices — defend against malicious peers
+        // trying to create a sparse array of millions of slots.
+        try { incoming.on('open', () => incoming.close()); } catch {}
+        return;
+      }
       transferChannels[idx] = incoming;
       incoming.on('open', () => { channelsReady++; });
       incoming.on('data', handleControlData);
