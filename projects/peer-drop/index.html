@@ -854,6 +854,18 @@
         name: transfer.name, size: transfer.size,
         transferred: transfer.bytesReceived, status: 'progress', speed
       });
+
+      // Auto-finalize when we've received every chunk. The sender's
+      // file-complete control message can race ahead of the last data chunks
+      // (control channel vs. 4 parallel transfer channels — no ordering
+      // guarantee between them), so we don't rely on it to trigger
+      // finalization. Instead, finalization happens exactly when
+      // nextContiguous reaches totalChunks — either here as the last chunk
+      // arrives, or in handleFileComplete if it happens to arrive last.
+      if (transfer.nextContiguous === transfer.totalChunks && !transfer.finalizing) {
+        transfer.finalizing = true;
+        finalizeIncomingTransfer(id);
+      }
     }
 
     // Close an incoming transfer's writable and drop state. Safe to call multiple times.
@@ -868,12 +880,13 @@
       }
     }
 
-    async function handleFileComplete(msg) {
-      const id = sanitizeId(msg.id);
+    // Finalize a fully-received incoming transfer: flush writes, close the
+    // writable (or assemble the in-memory Blob), trigger download, and clean up.
+    // Idempotent via the caller's `finalizing` flag.
+    async function finalizeIncomingTransfer(id) {
       const transfer = incomingTransfers[id];
       if (!transfer) return;
 
-      // Finalize: wait for all writes to flush, then close stream or assemble Blob
       if (transfer.writable) {
         try {
           await transfer.writeChain;
@@ -907,6 +920,23 @@
       });
 
       delete incomingTransfers[id];
+    }
+
+    // file-complete is now a HINT, not a trigger. The receiver may have
+    // already auto-finalized from handleFileChunk when the last chunk arrived
+    // (if file-complete arrived early over the control channel). If chunks
+    // are still in flight, this is a no-op — finalization will happen from
+    // handleFileChunk when nextContiguous catches up.
+    function handleFileComplete(msg) {
+      const id = sanitizeId(msg.id);
+      const transfer = incomingTransfers[id];
+      if (!transfer || transfer.finalizing) return;
+      if (transfer.nextContiguous < transfer.totalChunks) {
+        // Chunks still in flight — handleFileChunk will finalize when they arrive
+        return;
+      }
+      transfer.finalizing = true;
+      finalizeIncomingTransfer(id);
     }
 
     // ── Transfer Resume ────────────────────────────────────────
