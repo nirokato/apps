@@ -462,23 +462,102 @@
     }
 
     // ── Activity Feed ─────────────────────────────────────────
-    function addActivityCard(id, html) {
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.id = 'activity-' + id;
-      card.innerHTML = html;
-      $activityFeed.prepend(card);
-      return card;
-    }
-
-    function updateActivityCard(id, html) {
-      const card = document.getElementById('activity-' + id);
-      if (card) card.innerHTML = html;
-    }
-
     function removeActivityCard(id) {
       const card = document.getElementById('activity-' + id);
       if (card) card.remove();
+    }
+
+    // Create or update an in-place transfer card. Uses DOM APIs exclusively —
+    // no innerHTML, no template-string interpolation — so the card is XSS-safe
+    // regardless of what the peer sends in filenames, error messages, etc.
+    //
+    // state: {
+    //   name: string,
+    //   size: number,
+    //   transferred?: number,   // bytes transferred (for progress/complete)
+    //   status: 'waiting' | 'progress' | 'paused' | 'complete' | 'declined' | 'error',
+    //   speed?: string,
+    //   error?: string          // custom subtitle for 'error' status
+    // }
+    function renderTransferCard(id, direction, state) {
+      const cardId = 'activity-' + direction + '-' + id;
+      let card = document.getElementById(cardId);
+      const isNew = !card;
+      if (isNew) {
+        card = document.createElement('div');
+        card.className = 'card';
+        card.id = cardId;
+      }
+      card.textContent = ''; // clear any previous content
+
+      const item = document.createElement('div');
+      item.className = 'transfer-item';
+
+      const header = document.createElement('div');
+      header.className = 'transfer-header';
+      const nameEl = document.createElement('span');
+      nameEl.className = 'transfer-name';
+      nameEl.textContent = state.name;
+      header.appendChild(nameEl);
+      const sizeEl = document.createElement('span');
+      sizeEl.className = 'transfer-size';
+      header.appendChild(sizeEl);
+      item.appendChild(header);
+
+      const transferred = state.transferred || 0;
+
+      if (state.status === 'waiting') {
+        sizeEl.textContent = formatSize(state.size);
+        item.appendChild(subtitleDiv('Waiting for peer to accept...', '#9a9686'));
+      } else if (state.status === 'paused') {
+        sizeEl.textContent = formatSize(state.size);
+        item.appendChild(subtitleDiv('Paused — waiting to reconnect...', '#c4a24e'));
+      } else if (state.status === 'declined') {
+        sizeEl.textContent = formatSize(state.size);
+        item.appendChild(subtitleDiv(direction === 'send' ? 'Declined by peer' : 'File declined', '#c44e4e'));
+      } else if (state.status === 'error') {
+        sizeEl.textContent = formatSize(state.size);
+        item.appendChild(subtitleDiv(state.error || 'Transfer failed', '#c44e4e'));
+      } else {
+        // progress or complete
+        sizeEl.textContent = formatSize(transferred) + ' / ' + formatSize(state.size);
+
+        const bar = document.createElement('div');
+        bar.className = 'progress-bar';
+        const fill = document.createElement('div');
+        fill.className = state.status === 'complete' ? 'progress-fill complete' : 'progress-fill';
+        const pct = state.size > 0 ? Math.round((transferred / state.size) * 100) : 0;
+        fill.style.width = pct + '%';
+        bar.appendChild(fill);
+        item.appendChild(bar);
+
+        const stats = document.createElement('div');
+        stats.className = 'transfer-stats';
+        const leftSpan = document.createElement('span');
+        const rightSpan = document.createElement('span');
+        if (state.status === 'complete') {
+          leftSpan.textContent = direction === 'send' ? 'Sent' : 'Received';
+          rightSpan.style.color = '#4ec44e';
+          rightSpan.textContent = 'Complete';
+        } else {
+          leftSpan.textContent = pct + '%';
+          rightSpan.textContent = state.speed || '';
+        }
+        stats.appendChild(leftSpan);
+        stats.appendChild(rightSpan);
+        item.appendChild(stats);
+      }
+
+      card.appendChild(item);
+      if (isNew) $activityFeed.prepend(card);
+      return card;
+    }
+
+    function subtitleDiv(text, color) {
+      const d = document.createElement('div');
+      d.style.cssText = 'font-size:0.75rem;color:' + color + ';';
+      d.textContent = text;
+      return d;
     }
 
     // ── File Transfer: Sending ────────────────────────────────
@@ -555,28 +634,12 @@
         totalChunks
       });
 
-      addActivityCard('send-' + id, `
-        <div class="transfer-item">
-          <div class="transfer-header">
-            <span class="transfer-name">${escapeHtml(file.name)}</span>
-            <span class="transfer-size">${formatSize(file.size)}</span>
-          </div>
-          <div style="font-size:0.75rem;color:#9a9686;">Waiting for peer to accept...</div>
-        </div>
-      `);
+      renderTransferCard(id, 'send', { name: file.name, size: file.size, status: 'waiting' });
 
       const accepted = await waitForResponse(id);
       if (!accepted) {
         delete outgoingTransfers[id];
-        updateActivityCard('send-' + id, `
-          <div class="transfer-item">
-            <div class="transfer-header">
-              <span class="transfer-name">${escapeHtml(file.name)}</span>
-              <span class="transfer-size">${formatSize(file.size)}</span>
-            </div>
-            <div style="font-size:0.75rem;color:#c44e4e;">Declined by peer</div>
-          </div>
-        `);
+        renderTransferCard(id, 'send', { name: file.name, size: file.size, status: 'declined' });
         return;
       }
 
@@ -594,15 +657,7 @@
         // Check if connection dropped
         if (!conn || !conn.open) {
           transfer.nextChunk = i;
-          updateActivityCard('send-' + id, `
-            <div class="transfer-item">
-              <div class="transfer-header">
-                <span class="transfer-name">${escapeHtml(file.name)}</span>
-                <span class="transfer-size">${formatSize(file.size)}</span>
-              </div>
-              <div style="font-size:0.75rem;color:#c4a24e;">Paused — waiting to reconnect...</div>
-            </div>
-          `);
+          renderTransferCard(id, 'send', { name: file.name, size: file.size, status: 'paused' });
           return; // will be resumed via handleTransferResume
         }
 
@@ -615,20 +670,12 @@
         transfer.nextChunk = i + 1;
 
         // Update progress
-        const pct = Math.round((end / file.size) * 100);
         const elapsed = (Date.now() - transfer.startTime) / 1000;
         const speed = elapsed > 0 ? formatSize(end / elapsed) + '/s' : '';
-
-        updateActivityCard('send-' + id, `
-          <div class="transfer-item">
-            <div class="transfer-header">
-              <span class="transfer-name">${escapeHtml(file.name)}</span>
-              <span class="transfer-size">${formatSize(end)} / ${formatSize(file.size)}</span>
-            </div>
-            <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-            <div class="transfer-stats"><span>${pct}%</span><span>${speed}</span></div>
-          </div>
-        `);
+        renderTransferCard(id, 'send', {
+          name: file.name, size: file.size, transferred: end,
+          status: 'progress', speed
+        });
 
         await waitForDrain(channel);
       }
@@ -636,16 +683,9 @@
       conn.send({ type: 'file-complete', id });
       delete outgoingTransfers[id];
 
-      updateActivityCard('send-' + id, `
-        <div class="transfer-item">
-          <div class="transfer-header">
-            <span class="transfer-name">${escapeHtml(file.name)}</span>
-            <span class="transfer-size">${formatSize(file.size)}</span>
-          </div>
-          <div class="progress-bar"><div class="progress-fill complete" style="width:100%"></div></div>
-          <div class="transfer-stats"><span>Sent</span><span style="color:#4ec44e;">Complete</span></div>
-        </div>
-      `);
+      renderTransferCard(id, 'send', {
+        name: file.name, size: file.size, transferred: file.size, status: 'complete'
+      });
     }
 
     // Promise that resolves when peer accepts/declines
@@ -713,14 +753,10 @@
       const safeId = sanitizeId(id);
       conn.send({ type: accept ? 'file-accept' : 'file-decline', id: safeId });
       if (!accept) {
+        const declinedName = (incomingTransfers[safeId] && incomingTransfers[safeId].name) || 'File';
+        const declinedSize = (incomingTransfers[safeId] && incomingTransfers[safeId].size) || 0;
         delete incomingTransfers[safeId];
-        updateActivityCard('recv-' + safeId, `
-          <div class="transfer-item">
-            <div class="transfer-header">
-              <span class="transfer-name">File declined</span>
-            </div>
-          </div>
-        `);
+        renderTransferCard(safeId, 'recv', { name: declinedName, size: declinedSize, status: 'declined' });
         setTimeout(() => removeActivityCard('recv-' + safeId), 2000);
       } else {
         const transfer = incomingTransfers[safeId];
@@ -748,16 +784,9 @@
           transfer.chunks = new Array(transfer.totalChunks);
         }
 
-        updateActivityCard('recv-' + safeId, `
-          <div class="transfer-item">
-            <div class="transfer-header">
-              <span class="transfer-name">${escapeHtml(transfer.name)}</span>
-              <span class="transfer-size">0 B / ${formatSize(transfer.size)}</span>
-            </div>
-            <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
-            <div class="transfer-stats"><span>0%</span><span></span></div>
-          </div>
-        `);
+        renderTransferCard(safeId, 'recv', {
+          name: transfer.name, size: transfer.size, transferred: 0, status: 'progress'
+        });
       }
     }
 
@@ -818,20 +847,13 @@
       transfer.received++;
       transfer.bytesReceived += byteLength;
 
-      const pct = Math.round((transfer.bytesReceived / transfer.size) * 100);
       const elapsed = (Date.now() - transfer.startTime) / 1000;
       const speed = elapsed > 0 ? formatSize(transfer.bytesReceived / elapsed) + '/s' : '';
 
-      updateActivityCard('recv-' + id, `
-        <div class="transfer-item">
-          <div class="transfer-header">
-            <span class="transfer-name">${escapeHtml(transfer.name)}</span>
-            <span class="transfer-size">${formatSize(transfer.bytesReceived)} / ${formatSize(transfer.size)}</span>
-          </div>
-          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-          <div class="transfer-stats"><span>${pct}%</span><span>${speed}</span></div>
-        </div>
-      `);
+      renderTransferCard(id, 'recv', {
+        name: transfer.name, size: transfer.size,
+        transferred: transfer.bytesReceived, status: 'progress', speed
+      });
     }
 
     // Close an incoming transfer's writable and drop state. Safe to call multiple times.
@@ -879,16 +901,10 @@
         URL.revokeObjectURL(url);
       }
 
-      updateActivityCard('recv-' + id, `
-        <div class="transfer-item">
-          <div class="transfer-header">
-            <span class="transfer-name">${escapeHtml(transfer.name)}</span>
-            <span class="transfer-size">${formatSize(transfer.size)}</span>
-          </div>
-          <div class="progress-bar"><div class="progress-fill complete" style="width:100%"></div></div>
-          <div class="transfer-stats"><span>Received</span><span style="color:#4ec44e;">Complete</span></div>
-        </div>
-      `);
+      renderTransferCard(id, 'recv', {
+        name: transfer.name, size: transfer.size,
+        transferred: transfer.size, status: 'complete'
+      });
 
       delete incomingTransfers[id];
     }
@@ -1000,12 +1016,6 @@
       wrapper.appendChild(copyBtn);
       card.appendChild(wrapper);
       $activityFeed.prepend(card);
-    }
-
-    function escapeHtml(str) {
-      const div = document.createElement('div');
-      div.textContent = str;
-      return div.innerHTML;
     }
 
     function sanitizeId(str) {
