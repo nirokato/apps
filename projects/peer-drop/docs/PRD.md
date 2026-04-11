@@ -146,12 +146,16 @@ Peer A (initiator)                    Peer B (joiner)
 // Data chunks (JSON envelope with ArrayBuffer payload)
 { type: "file-chunk", id: "<transfer-id>", index: 0, data: <ArrayBuffer> }
 
-// Completion
+// Last chunk additionally carries the sender's final SHA-256
+{ type: "file-chunk", id: "<transfer-id>", index: N-1, data: <ArrayBuffer>, sha256: "<64-hex>" }
+
+// Completion hint (receiver may have already auto-finalized based on chunk count)
 { type: "file-complete", id: "<transfer-id>" }
 ```
 
 - **Progress:** Sender tracks chunks sent. Receiver tracks chunks received. Both display a determinate progress bar with percentage, transferred/total size, and (if feasible) speed estimate.
-- **Completion:** On Chrome/Edge, receiver streams chunks to disk via File System Access API (`showSaveFilePicker` + `createWritable`). On Firefox/Safari, falls back to Blob assembly + `<a download>` click.
+- **Completion:** On Chrome/Edge, receiver streams chunks to disk via File System Access API (`showSaveFilePicker` + `createWritable`). On Firefox/Safari, falls back to Blob assembly + `<a download>` click. Finalization is triggered when `nextContiguous === totalChunks` (every chunk received), not by the `file-complete` control message — which is advisory only, since it races against data chunks on separate channels.
+- **Integrity verification:** Both peers maintain a rolling SHA-256 as chunks flow through. Sender feeds each chunk into the hasher exactly once (tracked by `hashedUpTo` so resume doesn't double-count). Receiver hashes chunks in index order as they become contiguous. The sender attaches its final digest to the **last chunk's message** — this guarantees the receiver has the hash by the time it has all data, regardless of channel ordering races. On finalize, receiver compares local vs sender hash; mismatch → error state on the card, match → ✓ verified indicator.
 - **Queue:** Multiple files sent sequentially (one at a time to avoid memory pressure).
 
 ### 4.4 Text sharing
@@ -218,6 +222,7 @@ The following mitigations are implemented to defend against a malicious peer:
 |---------|---------|---------|-----|
 | PeerJS | 1.5.5 | WebRTC data connections | `cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js` |
 | qrcode-generator | latest | QR code rendering to canvas | `cdn.jsdelivr.net/npm/qrcode-generator` |
+| js-sha256 | 0.11.0 | Streaming SHA-256 for integrity verification | `cdn.jsdelivr.net/npm/js-sha256@0.11.0/build/sha256.min.js` |
 
 ### 7.2 File structure
 

@@ -7,6 +7,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/js-sha256@0.11.0/build/sha256.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -518,6 +519,7 @@
       } else if (state.status === 'error') {
         sizeEl.textContent = formatSize(state.size);
         item.appendChild(subtitleDiv(state.error || 'Transfer failed', '#c44e4e'));
+        if (state.sha256) item.appendChild(hashRow(state.sha256, state.hashVerified));
       } else {
         // progress or complete
         sizeEl.textContent = formatSize(transferred) + ' / ' + formatSize(state.size);
@@ -546,11 +548,46 @@
         stats.appendChild(leftSpan);
         stats.appendChild(rightSpan);
         item.appendChild(stats);
+
+        if (state.status === 'complete' && state.sha256) {
+          item.appendChild(hashRow(state.sha256, state.hashVerified));
+        }
       }
 
       card.appendChild(item);
       if (isNew) $activityFeed.prepend(card);
       return card;
+    }
+
+    // Render a SHA-256 line. Truncates to first 12 + last 4 hex chars for
+    // display, sets title to the full hash so users can copy it by hover,
+    // and shows a match/mismatch indicator when verified.
+    function hashRow(hex, verified) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;gap:0.5rem;font-size:0.7rem;color:#9a9686;margin-top:0.35rem;font-family:"JetBrains Mono",monospace;';
+
+      const left = document.createElement('span');
+      left.textContent = 'sha256 ';
+      const hashEl = document.createElement('span');
+      hashEl.textContent = hex.slice(0, 12) + '…' + hex.slice(-4);
+      hashEl.title = hex; // full hash on hover
+      hashEl.style.color = '#e8e4d4';
+      left.appendChild(hashEl);
+
+      const right = document.createElement('span');
+      if (verified === true) {
+        right.textContent = '✓ verified';
+        right.style.color = '#4ec44e';
+      } else if (verified === false) {
+        right.textContent = '✗ mismatch';
+        right.style.color = '#c44e4e';
+      } else {
+        right.textContent = '';
+      }
+
+      row.appendChild(left);
+      row.appendChild(right);
+      return row;
     }
 
     function subtitleDiv(text, color) {
@@ -623,7 +660,15 @@
       const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
       // Persist transfer state for resume
-      outgoingTransfers[id] = { file, totalChunks, nextChunk: 0, startTime: Date.now() };
+      outgoingTransfers[id] = {
+        file, totalChunks, nextChunk: 0, startTime: Date.now(),
+        // Rolling SHA-256 state. hasher is fed each chunk in index order
+        // exactly once (hashedUpTo is the watermark so resume doesn't
+        // double-hash chunks already processed before a disconnect).
+        hasher: typeof sha256 !== 'undefined' ? sha256.create() : null,
+        hashedUpTo: 0,
+        computedHash: null
+      };
 
       // Send offer over control connection
       conn.send({
@@ -666,7 +711,24 @@
         const end = Math.min(start + CHUNK_SIZE, file.size);
         const chunk = await file.slice(start, end).arrayBuffer();
 
-        channel.send({ type: 'file-chunk', id, index: i, data: chunk });
+        // Roll the hash forward exactly once per chunk index. On resume,
+        // chunks with index < hashedUpTo were already hashed in a prior run.
+        if (transfer.hasher && i >= transfer.hashedUpTo) {
+          transfer.hasher.update(new Uint8Array(chunk));
+          transfer.hashedUpTo = i + 1;
+          if (transfer.hashedUpTo === totalChunks) {
+            transfer.computedHash = transfer.hasher.hex();
+          }
+        }
+
+        // Send the chunk. Attach the final SHA-256 to the LAST chunk message
+        // so the receiver always has the hash by the time it has all data —
+        // regardless of file-complete's arrival order on the control channel.
+        const msg = { type: 'file-chunk', id, index: i, data: chunk };
+        if (i === totalChunks - 1 && transfer.computedHash) {
+          msg.sha256 = transfer.computedHash;
+        }
+        channel.send(msg);
         transfer.nextChunk = i + 1;
 
         // Update progress
@@ -681,10 +743,12 @@
       }
 
       conn.send({ type: 'file-complete', id });
+      const finalHash = transfer.computedHash;
       delete outgoingTransfers[id];
 
       renderTransferCard(id, 'send', {
-        name: file.name, size: file.size, transferred: file.size, status: 'complete'
+        name: file.name, size: file.size, transferred: file.size, status: 'complete',
+        sha256: finalHash, hashVerified: finalHash ? true : null
       });
     }
 
@@ -710,7 +774,22 @@
         return;
       }
 
-      incomingTransfers[id] = { name, size, mimeType, totalChunks, received: 0, bytesReceived: 0, nextContiguous: 0, pendingInMem: {}, startTime: null, writable: null, writeChain: Promise.resolve(), writeError: null, chunks: null, nextWriteIndex: 0, pendingChunks: {} };
+      incomingTransfers[id] = {
+        name, size, mimeType, totalChunks,
+        received: 0, bytesReceived: 0, nextContiguous: 0, pendingInMem: {},
+        startTime: null,
+        writable: null, writeChain: Promise.resolve(), writeError: null,
+        chunks: null, nextWriteIndex: 0, pendingChunks: {},
+        // Rolling SHA-256 over chunks in INDEX order. hashIndex is the next
+        // chunk index to hash — advances from handleFileChunk as chunks
+        // become contiguous. senderHash is captured from the last chunk
+        // message so we can verify integrity on finalize.
+        hasher: typeof sha256 !== 'undefined' ? sha256.create() : null,
+        hashIndex: 0,
+        senderHash: null,
+        localHash: null,
+        hashVerified: null  // null = unknown, true = match, false = mismatch
+      };
 
       const card = document.createElement('div');
       card.className = 'card';
@@ -803,6 +882,12 @@
       if (!data || typeof data !== 'object') return;
       const byteLength = data.byteLength != null ? data.byteLength : (data.size != null ? data.size : 0);
 
+      // The last chunk carries the sender's SHA-256 so we always have it by
+      // the time we have all data, regardless of file-complete's arrival.
+      if (typeof msg.sha256 === 'string' && /^[0-9a-f]{64}$/i.test(msg.sha256)) {
+        transfer.senderHash = msg.sha256.toLowerCase();
+      }
+
       if (transfer.writable) {
         // FSAPI streaming: writes must be serialized (sequential + awaited).
         // Buffer out-of-order chunks, flush in-order.
@@ -813,6 +898,13 @@
           const chunk = transfer.pendingChunks[idx];
           delete transfer.pendingChunks[idx];
           transfer.nextWriteIndex++;
+          // Hash in index order (same order the sender hashed them)
+          if (transfer.hasher) {
+            try {
+              transfer.hasher.update(new Uint8Array(chunk));
+              transfer.hashIndex++;
+            } catch (e) { transfer.hasher = null; }
+          }
           // Chain writes to preserve order and capture rejections
           transfer.writeChain = transfer.writeChain.then(() => {
             if (transfer.writable) return transfer.writable.write(new Blob([chunk]));
@@ -830,6 +922,13 @@
         // In-memory path: store by index, advance nextContiguous from the front
         if (transfer.chunks[index] !== undefined) return; // dup chunk
         transfer.chunks[index] = data;
+        // Hash in index order as chunks become available from the front
+        while (transfer.hasher && transfer.chunks[transfer.hashIndex] !== undefined) {
+          try {
+            transfer.hasher.update(new Uint8Array(transfer.chunks[transfer.hashIndex]));
+            transfer.hashIndex++;
+          } catch (e) { transfer.hasher = null; break; }
+        }
       }
 
       // Advance nextContiguous if this chunk fills the front of the window
@@ -887,6 +986,18 @@
       const transfer = incomingTransfers[id];
       if (!transfer) return;
 
+      // Compute the local SHA-256 and compare against the sender's hash
+      // (captured from the last chunk message). hashVerified: true = match,
+      // false = mismatch, null = unknown (library missing or hash absent).
+      if (transfer.hasher) {
+        try {
+          transfer.localHash = transfer.hasher.hex();
+        } catch (e) { transfer.localHash = null; }
+      }
+      if (transfer.senderHash && transfer.localHash) {
+        transfer.hashVerified = (transfer.senderHash === transfer.localHash);
+      }
+
       if (transfer.writable) {
         try {
           await transfer.writeChain;
@@ -914,10 +1025,22 @@
         URL.revokeObjectURL(url);
       }
 
-      renderTransferCard(id, 'recv', {
-        name: transfer.name, size: transfer.size,
-        transferred: transfer.size, status: 'complete'
-      });
+      // If verification failed, surface it as an error state so the user knows
+      // not to trust the file. Otherwise render normal complete with the hash.
+      if (transfer.hashVerified === false) {
+        renderTransferCard(id, 'recv', {
+          name: transfer.name, size: transfer.size,
+          transferred: transfer.size, status: 'error',
+          error: 'Hash mismatch — file may be corrupted',
+          sha256: transfer.localHash, hashVerified: false
+        });
+      } else {
+        renderTransferCard(id, 'recv', {
+          name: transfer.name, size: transfer.size,
+          transferred: transfer.size, status: 'complete',
+          sha256: transfer.localHash, hashVerified: transfer.hashVerified
+        });
+      }
 
       delete incomingTransfers[id];
     }
