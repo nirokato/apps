@@ -1026,6 +1026,27 @@
       }
     }
 
+    // Transfer channels carry chunk data only. Control messages (offers,
+    // accepts, text, resume) must arrive on the control connection exclusively.
+    function handleTransferChannelData(data) {
+      if (!data || data.type !== 'file-chunk') return;
+      handleFileChunk(data);
+    }
+
+    // Defensive listener cleanup for a DataConnection (or null). PeerJS uses
+    // EventEmitter internally; remove all our handlers so the old connection
+    // doesn't keep us pinned in its listener map after close.
+    function cleanupConnection(c) {
+      if (!c) return;
+      try {
+        if (typeof c.removeAllListeners === 'function') {
+          c.removeAllListeners();
+        } else if (typeof c.off === 'function') {
+          for (const ev of ['open', 'data', 'close', 'error']) c.off(ev);
+        }
+      } catch (e) { /* best-effort */ }
+    }
+
     function setupConnection(connection) {
       conn = connection;
       conn.on('open', () => {
@@ -1035,8 +1056,10 @@
         $sendSection.classList.remove('hidden');
         acquireWakeLock();
         openTransferChannels();
-        // After channels are ready (or immediately if none), exchange resume state
-        setTimeout(() => sendResumeState(), 500);
+        // sendResumeState() is triggered by onTransferChannelOpen once all
+        // NUM_CHANNELS transfer channels have opened — avoids the previous
+        // fixed-delay race where the timeout could fire before channels
+        // were ready, or after the conn had already dropped again.
         // Restart queued sends that were paused by a prior disconnect
         if (outgoingQueue.length > 0 && !sending) processQueue();
       });
@@ -1044,10 +1067,17 @@
       conn.on('data', handleControlData);
 
       conn.on('close', () => {
+        // Defensive: remove all our listeners so the old DataConnection
+        // doesn't retain references to our closures after PeerJS hands it
+        // to its internal reconnect machinery.
+        const oldConn = conn;
+        const oldChannels = transferChannels;
         conn = null;
         transferChannels = [];
         channelsReady = 0;
         releaseWakeLock();
+        cleanupConnection(oldConn);
+        for (const ch of oldChannels) cleanupConnection(ch);
         // Don't clear incomingTransfers or outgoingTransfers — needed for resume
         if (isHost) {
           setStatus('waiting', 'Peer disconnected. Waiting for reconnection...');
@@ -1067,6 +1097,16 @@
     }
 
     // ── Transfer Channels ─────────────────────────────────────
+    // Called when a transfer channel opens. When all NUM_CHANNELS are ready,
+    // trigger the post-connect resume exchange. This replaces a previous
+    // fixed 500ms setTimeout with an event-driven signal.
+    function onTransferChannelOpen() {
+      channelsReady++;
+      if (channelsReady === NUM_CHANNELS) {
+        sendResumeState();
+      }
+    }
+
     function openTransferChannels() {
       if (isHost) return; // joiner opens channels to host
       channelsReady = 0;
@@ -1078,8 +1118,8 @@
           serialization: 'binary',
           metadata: { type: 'xfer', index: i }
         });
-        ch.on('open', () => { channelsReady++; });
-        ch.on('data', handleControlData); // chunks arrive here too
+        ch.on('open', onTransferChannelOpen);
+        ch.on('data', handleTransferChannelData);
         ch.on('error', (err) => console.error('Transfer channel error:', err));
         transferChannels[i] = ch;
       }
@@ -1094,8 +1134,8 @@
         return;
       }
       transferChannels[idx] = incoming;
-      incoming.on('open', () => { channelsReady++; });
-      incoming.on('data', handleControlData);
+      incoming.on('open', onTransferChannelOpen);
+      incoming.on('data', handleTransferChannelData);
       incoming.on('error', (err) => console.error('Transfer channel error:', err));
     }
 
