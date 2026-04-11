@@ -68,7 +68,7 @@ Files are streamed in 256KB slices across 4 parallel data channels:
 5. Receiver writes to disk (File System Access API) or assembles Blob (fallback)
 ```
 
-On reconnect, the receiver sends `transfer-resume` with received chunk counts, and the sender resumes from where it left off.
+On reconnect, the receiver sends `transfer-resume` with each transfer's **lowest unreceived chunk index** (`nextContiguous`), and the sender resumes from exactly that index — correct even with out-of-order delivery across multiple channels.
 
 **Send side:** reads one 256KB slice at a time via `file.slice()` — constant memory. Chunks are distributed round-robin across 4 transfer channels with per-channel backpressure via `bufferedAmountLowThreshold`.
 

@@ -171,7 +171,9 @@ Peer A (initiator)                    Peer B (joiner)
 - **Signaling:** PeerJS cloud server (`0.peerjs.com`) for WebRTC handshake only.
 - **ICE:** Default STUN via Google (`stun:stun.l.google.com:19302`). No TURN server (MVP scope).
 - **Reconnection:** If the DataConnection drops, the joiner automatically retries connecting to the host peer ID. Host re-registers the same ID on PeerJS disconnect/reconnect.
-- **Cleanup:** On `pagehide` (not `beforeunload`, for Safari compatibility), destroy the Peer instance.
+- **Resumable transfers:** Outgoing transfer state (file ref, next chunk) persists across disconnect. On reconnect, the receiver sends a `transfer-resume` message listing each active transfer's lowest unreceived chunk index (`nextContiguous`) — correct even with out-of-order multi-channel delivery. The sender resumes from exactly that index. Receiver-side, the FSAPI writable stays open across the network drop so new chunks can continue writing to the same file handle.
+- **Resume protocol message:** `{ type: "transfer-resume", transfers: [{ id, nextContiguous }] }`. The `nextContiguous` field is validated and clamped to `[0, totalChunks]` on the sender side to defend against malicious peer input.
+- **Cleanup:** On `pagehide` (not `beforeunload`, for Safari compatibility), destroy the Peer instance and close any open FSAPI writables so the OS doesn't hold file locks.
 
 ---
 

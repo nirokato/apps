@@ -655,7 +655,7 @@
         return;
       }
 
-      incomingTransfers[id] = { name, size, mimeType, totalChunks, received: 0, startTime: null, writable: null, chunks: null, nextWriteIndex: 0, pendingChunks: {} };
+      incomingTransfers[id] = { name, size, mimeType, totalChunks, received: 0, bytesReceived: 0, nextContiguous: 0, pendingInMem: {}, startTime: null, writable: null, writeChain: Promise.resolve(), writeError: null, chunks: null, nextWriteIndex: 0, pendingChunks: {} };
 
       const card = document.createElement('div');
       card.className = 'card';
@@ -749,34 +749,69 @@
     function handleFileChunk(msg) {
       const id = sanitizeId(msg.id);
       const transfer = incomingTransfers[id];
-      if (!transfer) return;
+      if (!transfer || transfer.writeError) return;
 
       const index = Number(msg.index);
-      if (index < 0 || index >= transfer.totalChunks) return;
+      if (!Number.isInteger(index) || index < 0 || index >= transfer.totalChunks) return;
+
+      // ArrayBuffer or Blob expected from PeerJS binary serialization
+      const data = msg.data;
+      if (!data || typeof data !== 'object') return;
+      const byteLength = data.byteLength != null ? data.byteLength : (data.size != null ? data.size : 0);
 
       if (transfer.writable) {
-        // FSAPI streaming: must write in order. Buffer out-of-order chunks.
-        transfer.pendingChunks[index] = msg.data;
+        // FSAPI streaming: writes must be serialized (sequential + awaited).
+        // Buffer out-of-order chunks, flush in-order.
+        if (index < transfer.nextWriteIndex || transfer.pendingChunks[index] !== undefined) return; // dup
+        transfer.pendingChunks[index] = data;
         while (transfer.pendingChunks[transfer.nextWriteIndex] !== undefined) {
-          transfer.writable.write(new Blob([transfer.pendingChunks[transfer.nextWriteIndex]]));
-          delete transfer.pendingChunks[transfer.nextWriteIndex];
+          const idx = transfer.nextWriteIndex;
+          const chunk = transfer.pendingChunks[idx];
+          delete transfer.pendingChunks[idx];
           transfer.nextWriteIndex++;
+          // Chain writes to preserve order and capture rejections
+          transfer.writeChain = transfer.writeChain.then(() => {
+            if (transfer.writable) return transfer.writable.write(new Blob([chunk]));
+          }).catch((err) => {
+            if (transfer.writeError) return;
+            transfer.writeError = err;
+            console.error('Write failed:', err);
+            showError('Failed to write file: ' + (err.message || 'disk error'));
+            // Notify sender and abort local state
+            try { if (conn && conn.open) conn.send({ type: 'file-decline', id }); } catch {}
+            abortIncomingTransfer(id);
+          });
         }
       } else if (transfer.chunks) {
-        transfer.chunks[index] = msg.data;
+        // In-memory path: store by index, advance nextContiguous from the front
+        if (transfer.chunks[index] !== undefined) return; // dup chunk
+        transfer.chunks[index] = data;
       }
-      transfer.received++;
 
-      const receivedBytes = Math.min(transfer.received * CHUNK_SIZE, transfer.size);
-      const pct = Math.round((receivedBytes / transfer.size) * 100);
+      // Advance nextContiguous if this chunk fills the front of the window
+      if (index === transfer.nextContiguous) {
+        while (true) {
+          const next = transfer.nextContiguous;
+          const have = transfer.writable
+            ? next < transfer.nextWriteIndex
+            : transfer.chunks && transfer.chunks[next] !== undefined;
+          if (!have) break;
+          transfer.nextContiguous++;
+        }
+      }
+
+      transfer.received++;
+      transfer.bytesReceived += byteLength;
+
+      const pct = Math.round((transfer.bytesReceived / transfer.size) * 100);
       const elapsed = (Date.now() - transfer.startTime) / 1000;
-      const speed = elapsed > 0 ? formatSize(receivedBytes / elapsed) + '/s' : '';
+      const speed = elapsed > 0 ? formatSize(transfer.bytesReceived / elapsed) + '/s' : '';
 
       updateActivityCard('recv-' + id, `
         <div class="transfer-item">
           <div class="transfer-header">
             <span class="transfer-name">${escapeHtml(transfer.name)}</span>
-            <span class="transfer-size">${formatSize(receivedBytes)} / ${formatSize(transfer.size)}</span>
+            <span class="transfer-size">${formatSize(transfer.bytesReceived)} / ${formatSize(transfer.size)}</span>
           </div>
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
           <div class="transfer-stats"><span>${pct}%</span><span>${speed}</span></div>
@@ -784,15 +819,40 @@
       `);
     }
 
+    // Close an incoming transfer's writable and drop state. Safe to call multiple times.
+    async function abortIncomingTransfer(id) {
+      const transfer = incomingTransfers[id];
+      if (!transfer) return;
+      delete incomingTransfers[id];
+      if (transfer.writable) {
+        try { await transfer.writeChain; } catch {}
+        try { await transfer.writable.close(); } catch {}
+        transfer.writable = null;
+      }
+    }
+
     async function handleFileComplete(msg) {
       const id = sanitizeId(msg.id);
       const transfer = incomingTransfers[id];
       if (!transfer) return;
 
-      // Finalize: close stream or assemble Blob
+      // Finalize: wait for all writes to flush, then close stream or assemble Blob
       if (transfer.writable) {
-        await transfer.writable.close();
-      } else {
+        try {
+          await transfer.writeChain;
+        } catch (err) {
+          // Write error already surfaced in handleFileChunk; ensure cleanup
+          await abortIncomingTransfer(id);
+          return;
+        }
+        try {
+          await transfer.writable.close();
+        } catch (err) {
+          console.error('Failed to close writable:', err);
+          showError('Failed to finalize file: ' + (err.message || 'close error'));
+        }
+        transfer.writable = null;
+      } else if (transfer.chunks) {
         const blob = new Blob(transfer.chunks, { type: transfer.mimeType });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -801,7 +861,7 @@
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        URL.revokeObjectURL(url);
       }
 
       updateActivityCard('recv-' + id, `
@@ -819,24 +879,41 @@
     }
 
     // ── Transfer Resume ────────────────────────────────────────
+    // Sent by the receiver on reconnect. Reports the lowest chunk index NOT yet
+    // received contiguously, so the sender resumes from exactly that index
+    // regardless of out-of-order delivery across multiple channels.
     function sendResumeState() {
-      // Tell the peer what incoming transfers we have in progress
-      const active = Object.entries(incomingTransfers).map(([id, t]) => ({
-        id, received: t.received
-      }));
-      if (active.length > 0) {
+      if (!conn || !conn.open) return;
+      const active = Object.entries(incomingTransfers)
+        .filter(([, t]) => !t.writeError)
+        .map(([id, t]) => ({ id, nextContiguous: t.nextContiguous }));
+      if (active.length === 0) return;
+      try {
         conn.send({ type: 'transfer-resume', transfers: active });
+      } catch (err) {
+        console.error('Failed to send resume state:', err);
       }
     }
 
-    function handleTransferResume(msg) {
-      // Peer is telling us which of our outgoing transfers they've partially received
-      for (const { id, received } of msg.transfers) {
+    async function handleTransferResume(msg) {
+      if (!msg || !Array.isArray(msg.transfers)) return;
+      // Process sequentially so parallel sendChunks loops don't contend for channels
+      for (const entry of msg.transfers) {
+        if (!entry || typeof entry !== 'object') continue;
+        const id = sanitizeId(entry.id);
+        if (!id) continue;
         const transfer = outgoingTransfers[id];
-        if (transfer) {
-          transfer.nextChunk = received;
-          transfer.startTime = Date.now() - 1; // avoid /0
-          sendChunks(id);
+        if (!transfer || typeof transfer !== 'object') continue;
+        // Clamp to valid range
+        const next = Number(entry.nextContiguous);
+        if (!Number.isInteger(next)) continue;
+        const clamped = Math.max(0, Math.min(transfer.totalChunks, next));
+        transfer.nextChunk = clamped;
+        transfer.startTime = Date.now() - 1; // avoid /0 in speed calc
+        try {
+          await sendChunks(id);
+        } catch (err) {
+          console.error('Resume failed for', id, err);
         }
       }
     }
@@ -1102,6 +1179,14 @@
     // ── Cleanup ───────────────────────────────────────────────
     window.addEventListener('pagehide', () => {
       releaseWakeLock();
+      // Best-effort close of any in-flight writable streams so the OS isn't
+      // left holding file locks. Fire-and-forget — pagehide cannot await.
+      for (const id of Object.keys(incomingTransfers)) {
+        const t = incomingTransfers[id];
+        if (t && t.writable) {
+          try { t.writable.close(); } catch {}
+        }
+      }
       if (peer) peer.destroy();
     });
 
