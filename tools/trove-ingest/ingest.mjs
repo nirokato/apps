@@ -42,7 +42,6 @@ const CONFIG = {
   pagesPerQuery: 2,        // 36 * 2 = up to 72 candidates per query before dedupe
   ordering: '-likes',      // popular first
   delayMs: 600,            // be polite between requests
-  userAgent: 'trove-ingest/1.0 (+https://apps.andymolenda.com; metadata indexer)',
   model: 'Xenova/all-MiniLM-L6-v2',
   dims: 384,
 };
@@ -68,6 +67,27 @@ query SearchModels($query: String!, $limit: Int!, $offset: Int!, $ordering: Stri
   }
 }`;
 
+// Browser-identity headers. Printables' API sits behind Cloudflare, which 403s
+// requests that don't look like the site's own XHR (Node's default fetch sends
+// no/!browser User-Agent). These emulate a normal Chrome request from the
+// frontend. NOTE: if Cloudflare escalates to a JS/Turnstile challenge, no header
+// set will pass — the logged 403 body will show that, and the right move is a
+// sanctioned API (Thingiverse/MyMiniFactory) rather than challenge-solving.
+const BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  'Accept': '*/*',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Content-Type': 'application/json',
+  'Origin': 'https://www.printables.com',
+  'Referer': 'https://www.printables.com/',
+  'sec-ch-ua': '"Chromium";v="126", "Not.A/Brand";v="24", "Google Chrome";v="126"',
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-platform': '"Linux"',
+  'sec-fetch-dest': 'empty',
+  'sec-fetch-mode': 'cors',
+  'sec-fetch-site': 'same-site',
+};
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function parseArgs(argv) {
@@ -83,33 +103,43 @@ function parseArgs(argv) {
 }
 
 async function gqlFetch(query, offset, attempt = 1) {
+  let res;
   try {
-    const res = await fetch(CONFIG.endpoint, {
+    res = await fetch(CONFIG.endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'User-Agent': CONFIG.userAgent,
-        'Origin': 'https://www.printables.com',
-      },
+      headers: BROWSER_HEADERS,
       body: JSON.stringify({
         query: GQL_QUERY,
         variables: { query, limit: CONFIG.pageSize, offset, ordering: CONFIG.ordering },
       }),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    if (json.errors) throw new Error(`GraphQL: ${JSON.stringify(json.errors).slice(0, 300)}`);
-    return json?.data?.result?.items || [];
   } catch (err) {
-    if (attempt <= 4) {
-      const backoff = 2 ** attempt * 1000;
-      console.warn(`  ! "${query}" offset ${offset} failed (${err.message}); retry in ${backoff}ms`);
-      await sleep(backoff);
-      return gqlFetch(query, offset, attempt + 1);
-    }
-    throw err;
+    return retryOrThrow(query, offset, attempt, `network: ${err.message}`);
   }
+
+  if (!res.ok) {
+    const body = (await res.text().catch(() => '')).replace(/\s+/g, ' ').trim().slice(0, 400);
+    // Auth/blocks (401/403) won't resolve by retrying — fail fast with the body
+    // so we can tell a simple WAF block from a JS challenge.
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(`HTTP ${res.status} access blocked. Response body: ${body || '(empty)'}`);
+    }
+    return retryOrThrow(query, offset, attempt, `HTTP ${res.status}: ${body}`);
+  }
+
+  const json = await res.json();
+  if (json.errors) throw new Error(`GraphQL: ${JSON.stringify(json.errors).slice(0, 300)}`);
+  return json?.data?.result?.items || [];
+}
+
+async function retryOrThrow(query, offset, attempt, reason) {
+  if (attempt <= 4) {
+    const backoff = 2 ** attempt * 1000;
+    console.warn(`  ! "${query}" offset ${offset} failed (${reason}); retry in ${backoff}ms`);
+    await sleep(backoff);
+    return gqlFetch(query, offset, attempt + 1);
+  }
+  throw new Error(reason);
 }
 
 // Derive a commercial-use flag from the license name (CC *-NC variants and
