@@ -1,0 +1,56 @@
+name: Refresh trove index
+
+# Rebuilds projects/trove/data/index.json from the Printables GraphQL API and
+# commits it to main, which re-triggers deploy.yml for the trove project.
+#
+# Notes:
+# - The Printables API is unofficial/undocumented. If a run fails or indexes 0
+#   models, the schema has likely drifted — update tools/trove-ingest/ingest.mjs.
+# - This pushes directly to main. If main is branch-protected against direct
+#   pushes, switch this to open a PR instead (e.g. peter-evans/create-pull-request).
+
+on:
+  schedule:
+    - cron: "17 5 * * 1" # Mondays 05:17 UTC
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Max models to index"
+        default: "400"
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: trove-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build index
+        run: node tools/trove-ingest/ingest.mjs --limit "${{ github.event.inputs.limit || '400' }}"
+
+      - name: Commit & push if changed
+        run: |
+          if git diff --quiet -- projects/trove/data; then
+            echo "Index unchanged — nothing to commit."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add projects/trove/data
+          git commit -m "chore(trove): refresh Printables index"
+          git push origin main

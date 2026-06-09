@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>trove — apps.andymolenda.com</title>
+  <meta name="description" content="Search 3D-printable models by decor style or aesthetic — semantic search over a Printables index, right in your browser.">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0f0f0c;
+      color: #e8e4d4;
+      min-height: 100vh;
+      padding: 2rem 1rem 4rem;
+      line-height: 1.5;
+    }
+    .container { max-width: 600px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+    h1 .accent { color: #c4a24e; }
+    .subtitle { color: #9a9686; font-size: 0.9rem; margin-bottom: 1.5rem; }
+
+    /* Search */
+    .search { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+    #q {
+      flex: 1;
+      background: #1a1a16;
+      border: 1px solid #2a2a24;
+      border-radius: 6px;
+      color: #e8e4d4;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.95rem;
+      padding: 0.6rem 0.85rem;
+    }
+    #q::placeholder { color: #6f6c60; }
+    #q:focus { outline: none; border-color: #c4a24e; }
+    .btn {
+      border: 1px solid #2a2a24;
+      color: #e8e4d4;
+      background: none;
+      border-radius: 6px;
+      padding: 0.4rem 0.85rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+    .btn:hover { border-color: #c4a24e; color: #c4a24e; }
+    .btn-primary { background: #c4a24e; border-color: #c4a24e; color: #0f0f0c; font-weight: 600; }
+    .btn-primary:hover { background: #d4b25e; border-color: #d4b25e; color: #0f0f0c; }
+    .btn-primary:disabled { opacity: 0.5; cursor: default; }
+
+    /* Chips */
+    .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
+    .chip {
+      background: none;
+      border: 1px solid #2a2a24;
+      color: #9a9686;
+      border-radius: 999px;
+      padding: 0.25rem 0.7rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .chip:hover { border-color: #c4a24e; color: #c4a24e; }
+
+    /* Filters */
+    .filters { display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; font-size: 0.8rem; color: #9a9686; }
+    .filters label { display: flex; align-items: center; gap: 0.4rem; }
+    .filters select {
+      background: #0f0f0c;
+      border: 1px solid #2a2a24;
+      color: #e8e4d4;
+      border-radius: 6px;
+      padding: 0.25rem 0.4rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.8rem;
+    }
+    .filters select:focus { outline: none; border-color: #c4a24e; }
+
+    /* Status / notices */
+    .status { font-size: 0.82rem; color: #9a9686; min-height: 1.2em; margin-bottom: 0.25rem; }
+    .status.busy { color: #c4a24e; }
+    .note { font-size: 0.8rem; color: #c4a24e; min-height: 1em; margin-bottom: 0.75rem; }
+    .banner {
+      background: #1a1a16;
+      border: 1px solid #2a2a24;
+      border-left: 3px solid #c4a24e;
+      border-radius: 6px;
+      padding: 0.7rem 0.9rem;
+      font-size: 0.8rem;
+      color: #9a9686;
+      margin-bottom: 1rem;
+    }
+    .banner code { font-family: 'JetBrains Mono', monospace; color: #c4a24e; font-size: 0.75rem; }
+
+    /* Results */
+    .results { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem; }
+    .empty { color: #9a9686; font-size: 0.9rem; padding: 1rem 0; }
+    .result {
+      display: flex;
+      gap: 0.9rem;
+      background: #1a1a16;
+      border: 1px solid #2a2a24;
+      border-radius: 8px;
+      padding: 0.9rem 1rem;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color 0.15s;
+    }
+    .result:hover { border-color: #c4a24e; }
+    .thumb { width: 64px; height: 64px; border-radius: 6px; flex-shrink: 0; object-fit: cover; }
+    .thumb-ph { display: flex; align-items: center; justify-content: center; }
+    .thumb-ph span { font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; color: #c4a24e; opacity: 0.8; }
+    .result-body { flex: 1; min-width: 0; }
+    .result-name { font-weight: 600; font-size: 0.95rem; }
+    .result:hover .result-name { color: #c4a24e; }
+    .result-desc {
+      color: #9a9686; font-size: 0.8rem; margin: 0.15rem 0 0.4rem;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.45rem; }
+    .tag { font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; color: #9a9686; background: #0f0f0c; border: 1px solid #2a2a24; border-radius: 4px; padding: 0.05rem 0.35rem; }
+    .result-meta { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; font-size: 0.72rem; }
+    .lic { display: flex; align-items: center; gap: 0.35rem; color: #9a9686; }
+    .lic .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .lic .dot.ok { background: #4ec44e; }
+    .lic .dot.no { background: #9a9686; }
+    .stats { font-family: 'JetBrains Mono', monospace; color: #9a9686; }
+    .match { height: 3px; background: #2a2a24; border-radius: 2px; margin-top: 0.5rem; overflow: hidden; }
+    .match-bar { height: 100%; background: #c4a24e; border-radius: 2px; }
+
+    /* Footer */
+    .foot { margin-top: 2rem; font-size: 0.78rem; color: #6f6c60; line-height: 1.6; }
+    .foot a { color: #9a9686; }
+    .back { margin-top: 1.25rem; font-size: 0.85rem; }
+    .back a { color: #9a9686; text-decoration: none; }
+    .back a:hover { color: #c4a24e; }
+    a { color: #c4a24e; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>trove<span class="accent">.</span></h1>
+    <p class="subtitle">Find 3D-printable models by <em>vibe</em>, not just tags. Describe a decor style and trove semantically ranks a Printables index — all in your browser.</p>
+
+    <div class="search">
+      <input id="q" type="text" autocomplete="off" placeholder="industrial eclectic amsterdam canal house…" aria-label="Describe an aesthetic">
+      <button id="go" class="btn btn-primary" type="button">Search</button>
+    </div>
+    <div id="chips" class="chips"></div>
+
+    <div class="filters">
+      <label>License
+        <select id="license">
+          <option value="any">Any</option>
+          <option value="commercial">Commercial OK</option>
+        </select>
+      </label>
+      <label>Sort
+        <select id="sort">
+          <option value="relevance">Best match</option>
+          <option value="popular">Most popular</option>
+        </select>
+      </label>
+      <span id="count" style="margin-left:auto;font-family:'JetBrains Mono',monospace;"></span>
+    </div>
+
+    <div id="status" class="status"></div>
+    <div id="note" class="note"></div>
+
+    <div id="banner" class="banner" hidden>
+      Showing a small <strong>sample dataset</strong> so you can try it out. Run the
+      <code>trove-refresh</code> workflow to index live Printables results.
+    </div>
+
+    <div id="results" class="results"></div>
+
+    <p class="foot">
+      Metadata is fetched from <a href="https://www.printables.com" target="_blank" rel="noopener noreferrer">Printables</a>;
+      models remain © their respective designers under the license shown. trove links out to the original listing and never rehosts files.
+      Semantic matching runs locally via a small embedding model — <span id="updated"></span>
+    </p>
+    <p class="back"><a href="https://apps.andymolenda.com">&larr; apps.andymolenda.com</a></p>
+  </div>
+
+  <script type="module" src="app.mjs"></script>
+</body>
+</html>
