@@ -12,6 +12,10 @@
 //   node tools/trove-ingest/ingest.mjs [--limit 400] [--out <path>] [--dry-run]
 //   node tools/trove-ingest/ingest.mjs --embed        # also precompute vectors
 //
+// Datacenter IPs are Cloudflare-blocked by Printables; set SCRAPER_API_KEY (and
+// optionally SCRAPER_API_TIER) to route through a residential unblocker. See the
+// SCRAPER block below.
+//
 // ─── IMPORTANT: schema drift ────────────────────────────────────────────────
 // Printables' GraphQL API is unofficial and undocumented; field/operation names
 // change without notice. If a run returns 0 items or errors, re-derive the
@@ -88,6 +92,35 @@ const BROWSER_HEADERS = {
   'sec-fetch-site': 'same-site',
 };
 
+// Optional residential-unblocker route. Datacenter IPs (GitHub Actions, cloud
+// sandboxes) get Cloudflare-403'd regardless of headers; an unblocker service
+// re-issues the request from a residential IP. Set SCRAPER_API_KEY to enable
+// (default provider: ScraperAPI); without it the request goes direct.
+//   SCRAPER_API_KEY   – provider API key (use a repo secret, never commit it)
+//   SCRAPER_API_TIER  – standard | premium (residential, default) | ultra_premium
+// ToS note: this routes around Printables' bot protection — acceptable for
+// low-volume public-metadata indexing with attribution; revisit with a
+// sanctioned API for anything permanent.
+const SCRAPER = {
+  apiKey: process.env.SCRAPER_API_KEY || '',
+  tier: process.env.SCRAPER_API_TIER || 'premium',
+};
+
+// The URL we actually POST to: ScraperAPI passthrough when keyed, else direct.
+// ScraperAPI forwards our method/body/headers (keep_headers) and re-issues the
+// request from a residential IP, returning Printables' response verbatim.
+function endpointUrl() {
+  if (!SCRAPER.apiKey) return CONFIG.endpoint;
+  const params = new URLSearchParams({
+    api_key: SCRAPER.apiKey,
+    url: CONFIG.endpoint,
+    keep_headers: 'true',
+  });
+  if (SCRAPER.tier === 'premium') params.set('premium', 'true');
+  else if (SCRAPER.tier === 'ultra_premium') params.set('ultra_premium', 'true');
+  return `https://api.scraperapi.com/?${params.toString()}`;
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function parseArgs(argv) {
@@ -105,7 +138,7 @@ function parseArgs(argv) {
 async function gqlFetch(query, offset, attempt = 1) {
   let res;
   try {
-    res = await fetch(CONFIG.endpoint, {
+    res = await fetch(endpointUrl(), {
       method: 'POST',
       headers: BROWSER_HEADERS,
       body: JSON.stringify({
@@ -179,7 +212,8 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`trove-ingest: gathering up to ${args.limit} models across ${CONFIG.queries.length} queries…`);
+  const route = SCRAPER.apiKey ? `via ScraperAPI (${SCRAPER.tier})` : 'direct';
+  console.log(`trove-ingest: gathering up to ${args.limit} models across ${CONFIG.queries.length} queries… [${route}]`);
   const byId = new Map();
 
   outer:
