@@ -1,7 +1,8 @@
 # WSS Transport Blockers — WASM ↔ Veilid Network
 
 **Date:** 2026-04-02
-**Status:** PARTIALLY RESOLVED — WSS bootstrap works, but persistent peer connection gap remains
+**Updated:** 2026-07-17
+**Status:** WAITING ON VEILID 0.6.0 — WebTransport will replace WSS workarounds
 
 ---
 
@@ -270,3 +271,43 @@ Location: projects/weft/wasm/veilid/
 8. **DHTSchema uses serde externally-tagged enums** (`{SMPL: {oCnt: 1, ...}}` not `{kind: 'SMPL', ...}`) and camelCase field names when compiled with `json-camel-case`.
 
 9. **WASM Worker polyfills needed:** `Window = self.constructor`, `window = self`, in-memory `localStorage` shim, `crypto` variable renamed to avoid shadowing `globalThis.crypto`.
+
+---
+
+## Veilid 0.6.0: WebTransport — Resolution Path
+
+**Posted:** 2026-06-13 (Veilid roadmap update)
+
+The Veilid team announced **WebTransport** as the v0.6.0 release, fast-tracked ahead of other milestones. This directly resolves the persistent peer connection blocker.
+
+### Why WebTransport fixes everything
+
+WebTransport is a browser API built on QUIC (UDP) that:
+- **Works in HTTPS secure context** — no mixed content issues
+- **Uses self-signed TLS certs** via pre-exchanged fingerprints — no centralized CA needed
+- **All major browsers support it** — Chrome, Firefox, Safari (Safari shipped full support recently)
+- Plays perfectly with Veilid's node-to-node model
+
+With WebTransport, the WSS workaround chain (custom-build veilid-server, RSA certs, acme.sh, Cloudflare DNS, port forwarding) becomes unnecessary. Every Veilid node can advertise a WebTransport endpoint using a self-signed cert, and browser WASM clients can connect to any of them from HTTPS pages.
+
+### What this means for weft
+
+1. **Stop investing in WSS workarounds** — the bootstrap-is-one-shot gap won't be fixed in WSS
+2. **When 0.6.0 ships:** rebuild veilid-wasm and veilid-server with WebTransport support, redeploy
+3. **Andy's veilid-server will advertise WebTransport** dial info alongside UDP/TCP, discoverable by all peers
+4. **The chicken-and-egg problem goes away** — browser clients can connect to any WebTransport peer, not just pre-known WSS nodes
+
+### Relevant roadmap milestones for weft
+
+| Release | Feature | Weft impact |
+|---------|---------|-------------|
+| **0.6.0** | **WebTransport** | Resolves HTTPS peer connection blocker |
+| 0.7.0 | DHT Route Autopublish | Simplifies presence — routes managed by Veilid, not app |
+| 0.11.0 | Blockstore | File attachments via Veilid network |
+| 1.0.0 | General Availability (March 2027) | API stability, production readiness |
+
+### Action plan
+
+- **Now:** Continue building local-first features (Phase 5 polish, Phase 4 sync primitives via export/import)
+- **On 0.6.0 release:** Rebuild WASM + server, test two-peer messaging, complete Phase 3 items 21-22
+- **On 0.7.0 release:** Simplify presence system using DHT Route Autopublish
