@@ -76,9 +76,10 @@ client-side on first visit and caches the result.
 
 ## Refreshing the index
 
-Automated by **`.github/workflows/trove-refresh.yml`** (weekly + manual
-dispatch): it runs the ingest on a CI runner and commits the updated index to
-`main`, which re-deploys trove.
+Automated by **`.github/workflows/trove-refresh.yml`** (manual dispatch only —
+the weekly schedule is disabled): trigger it from the Actions tab and it runs
+the ingest on a CI runner and commits the updated index to `main`, which
+re-deploys trove.
 
 Run it yourself:
 

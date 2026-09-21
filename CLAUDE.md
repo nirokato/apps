@@ -21,7 +21,7 @@ tools/
 .github/workflows/
   deploy.yml             Infrastructure (tofu plan/apply) + deploy changed projects
   claude.yml             Claude Code GitHub Action (issue/PR triggers)
-  trove-refresh.yml      Rebuild trove's Printables index (scheduled + manual)
+  trove-refresh.yml      Rebuild trove's Printables index (manual dispatch only)
 ```
 
 ## Adding a new project
@@ -100,7 +100,7 @@ When adding a project to the homepage, follow this exact pattern:
 - **No test framework or linter** is currently configured for most projects.
 - **Exception: Weft** uses vendored WASM binaries (Veilid, cr-sqlite) in `wasm/` and `lib/`. These are pre-built artifacts, not compiled in the deploy workflow. The application JS remains unbundled native ES modules consistent with repo conventions.
 - **Exception: Weft testing** uses Playwright (headless Chromium) to test Web Worker logic in a real browser context. Run with `node projects/weft/tests/run.js`. Tests exercise the DB worker (cr-sqlite) and app logic without network access; Veilid DHT tests require a live network and are manual-only. See `projects/weft/tests/README.md` for details.
-- **Exception: Trove** stays static + CDN-only, but adds two patterns: (1) **in-browser semantic search** — `transformers.js` (MiniLM sentence embeddings) loaded from CDN, computed client-side and cached in IndexedDB; (2) a **zero-dependency Node ingest tool** (`tools/trove-ingest/ingest.mjs`) that pulls Printables metadata into `projects/trove/data/index.json`, run weekly by `.github/workflows/trove-refresh.yml`. The optional `--embed` precompute path is the only piece that needs npm, and nothing from it is committed. Ranking math is unit-tested: `node projects/trove/tests/run.mjs`.
+- **Exception: Trove** stays static + CDN-only, but adds two patterns: (1) **in-browser semantic search** — `transformers.js` (MiniLM sentence embeddings) loaded from CDN, computed client-side and cached in IndexedDB; (2) a **zero-dependency Node ingest tool** (`tools/trove-ingest/ingest.mjs`) that pulls Printables metadata into `projects/trove/data/index.json`, run on demand via `.github/workflows/trove-refresh.yml` (manual dispatch only — the weekly schedule is disabled). The optional `--embed` precompute path is the only piece that needs npm, and nothing from it is committed. Ranking math is unit-tested: `node projects/trove/tests/run.mjs`.
 
 ## Deployment
 
@@ -108,7 +108,7 @@ When adding a project to the homepage, follow this exact pattern:
 - **Infrastructure:** OpenTofu manages Pages projects, custom domains, and DNS CNAMEs. State in Cloudflare R2 (`tofu-state` bucket, key `apps/`).
 - **Workflow:** `.github/workflows/deploy.yml` — tofu plan on PR (with comment), tofu apply + deploy on push to `main`.
 - **Auto-discovery:** The deploy job scans `projects/` at runtime to build its matrix. No manual matrix updates needed.
-- **Trove index refresh:** `.github/workflows/trove-refresh.yml` rebuilds `projects/trove/data/index.json` from the Printables API (weekly + manual dispatch) and commits to `main`, re-triggering trove's deploy. The deployed app is fully static; the ingest never runs in users' browsers.
+- **Trove index refresh:** `.github/workflows/trove-refresh.yml` rebuilds `projects/trove/data/index.json` from the Printables API (manual `workflow_dispatch` only — the weekly cron is commented out) and commits to `main`, re-triggering trove's deploy. The deployed app is fully static; the ingest never runs in users' browsers.
 - **Domains:** Homepage at `apps.andymolenda.com`, projects at `<name>.apps.andymolenda.com`.
 - **SSL:** Cloudflare Advanced Certificate Manager covers `*.apps.andymolenda.com`.
 
