@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>bubble-share — apps.andymolenda.com</title>
+  <meta name="description" content="Bubble Share, taken apart: interactive demos of how the FOSS Wi-Fi Aware sharing app for Android discovers peers, derives its 6-digit pairing code, frames files, and hands off over NFC.">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f0f0c; --surface: #1a1a16; --border: #2a2a24;
+      --text: #e8e4d4; --muted: #9a9686; --accent: #c4a24e;
+      --ok: #7fb069; --warn: #d08770;
+      /* Bubble Share's own Material palette, used only inside the fake phones */
+      --bs-bg: #f7f4fc; --bs-surface: #ece6f6; --bs-sheet: #f4f0fa; --bs-text: #1c1b1f;
+      --bs-muted: #6a6578; --bs-primary: #4a5d8c; --bs-ring: #4a5d8c; --bs-dim: rgba(28,27,31,.55);
+    }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem 1rem 4rem;
+      line-height: 1.5;
+    }
+    .container { max-width: 600px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+    h1 .accent { color: var(--accent); }
+    .tag {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 400; color: var(--muted);
+      border: 1px solid var(--border); border-radius: 999px; padding: 0.1rem 0.5rem; white-space: nowrap;
+    }
+    .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 0.5rem; }
+    .repo { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; margin-bottom: 1.75rem; }
+    .repo a { color: var(--muted); text-decoration: none; }
+    .repo a:hover { color: var(--accent); }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 1.25rem 1.5rem; margin-bottom: 1rem; font-size: 0.875rem;
+    }
+    .card h2 {
+      font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+      color: var(--accent); margin-bottom: 0.5rem;
+    }
+    .card h3 { font-size: 0.85rem; font-weight: 600; margin: 0.9rem 0 0.3rem; }
+    .card p + p, .card p + ul, .card ul + p { margin-top: 0.6rem; }
+    .card ul, .card ol { padding-left: 1.1rem; }
+    .card li + li { margin-top: 0.3rem; }
+    .card a { color: var(--accent); }
+    .muted { color: var(--muted); }
+    .small { font-size: 0.78rem; }
+    code, .mono {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.8em; color: var(--text);
+      background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0.05rem 0.3rem;
+      overflow-wrap: anywhere;
+    }
+    pre.hex {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; line-height: 1.5; color: var(--text);
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 0.75rem;
+      white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 0.4rem;
+    }
+    pre.hex .k { color: var(--accent); }
+    pre.hex .d { color: var(--muted); }
+    .table-wrap { overflow-x: auto; margin-top: 0.5rem; -webkit-overflow-scrolling: touch; }
+    table { width: 100%; min-width: 520px; border-collapse: collapse; font-size: 0.8rem; }
+    th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; }
+    td:first-child { color: var(--accent); white-space: nowrap; }
+
+    /* Controls */
+    .controls { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 0.75rem 0; }
+    .controls .spacer { flex: 1; }
+    .btn {
+      border: 1px solid var(--border); color: var(--text); background: none; border-radius: 6px;
+      padding: 0.4rem 0.8rem; font-family: 'Inter', sans-serif; font-size: 0.8rem; cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .btn:disabled { opacity: 0.4; cursor: default; }
+    .btn:disabled:hover { border-color: var(--border); color: var(--text); }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 600; }
+    .btn-primary:hover { background: #d4b25e; border-color: #d4b25e; color: var(--bg); }
+    .btn.active { border-color: var(--accent); color: var(--accent); }
+    .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .chip {
+      background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 999px;
+      padding: 0.25rem 0.7rem; font-family: 'Inter', sans-serif; font-size: 0.75rem; cursor: pointer;
+    }
+    .chip:hover { border-color: var(--accent); color: var(--accent); }
+    .chip.active { border-color: var(--accent); color: var(--accent); background: rgba(196,162,78,0.08); }
+    label.field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.75rem; color: var(--muted); flex: 1; min-width: 140px; }
+    input[type=text], textarea {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text);
+      font-family: 'Inter', sans-serif; font-size: 0.85rem; padding: 0.45rem 0.6rem; width: 100%;
+    }
+    input[type=text]:focus, textarea:focus { outline: none; border-color: var(--accent); }
+    input[type=file] { font-size: 0.75rem; color: var(--muted); }
+    .kv { display: grid; grid-template-columns: max-content 1fr; gap: 0.3rem 0.8rem; font-size: 0.78rem; margin-top: 0.6rem; }
+    .kv dt { color: var(--muted); }
+    .kv dd { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; overflow-wrap: anywhere; }
+    .kv dd.big { font-family: 'JetBrains Mono', monospace; font-size: 1.4rem; color: var(--accent); letter-spacing: 0.1em; }
+    .note { font-size: 0.75rem; color: var(--muted); margin-top: 0.5rem; }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+
+    /* Two phones */
+    .stage { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-top: 0.75rem; }
+    .phone {
+      background: #0b0b0a; border: 1px solid #3a3a32; border-radius: 22px; padding: 10px 8px; min-height: 440px;
+      display: flex; flex-direction: column; position: relative; box-shadow: 0 0 0 2px #1f1f1b inset;
+    }
+    .phone .screen {
+      flex: 1; background: var(--bs-bg); color: var(--bs-text); border-radius: 14px; overflow: hidden;
+      position: relative; display: flex; flex-direction: column; font-size: 0.68rem; line-height: 1.35;
+    }
+    .phone .statusbar { display: flex; justify-content: space-between; padding: 6px 10px 2px; font-size: 0.6rem; color: var(--bs-muted); }
+    .phone .statusbar b { color: var(--bs-text); font-weight: 600; }
+    .phone .label { position: absolute; left: 0; right: 0; bottom: -1.35rem; text-align: center; font-size: 0.7rem; color: var(--muted); }
+    .phone .app { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; }
+    .phone .heading { color: var(--bs-primary); font-weight: 600; font-size: 0.68rem; padding: 10px 14px 4px; }
+    .phone .peer {
+      background: var(--bs-surface); border-radius: 12px; margin: 2px 12px; padding: 9px 12px; display: flex; align-items: center;
+      justify-content: space-between; gap: 6px; border: 1px solid transparent;
+    }
+    .phone .peer.tappable { cursor: pointer; border-color: var(--bs-primary); animation: pulse 1.4s ease-in-out infinite; }
+    .phone .peer .pid { font-family: 'JetBrains Mono', monospace; font-size: 0.55rem; color: var(--bs-muted); border: 1px solid #c9c2d6; border-radius: 4px; padding: 0 4px; }
+    .phone .empty { color: var(--bs-muted); padding: 12px 14px; font-style: italic; }
+    .phone .bottomnav { display: flex; justify-content: space-around; border-top: 1px solid #ddd6ea; padding: 6px 0; font-size: 0.58rem; color: var(--bs-muted); background: var(--bs-surface); }
+    .phone .bottomnav .sel { color: var(--bs-primary); font-weight: 600; }
+    .phone .files { padding: 10px 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .phone .files .tile { background: #e7ecf3; border: 1px solid #7d8ea8; border-radius: 8px; height: 70px; display: flex; flex-direction: column; justify-content: flex-end; padding: 6px; font-size: 0.55rem; }
+    .phone .files .tile .fn { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .phone .files .tile .fs { color: var(--bs-muted); }
+    .phone .filesbar { display: flex; justify-content: space-between; padding: 8px 12px; font-weight: 600; font-size: 0.7rem; }
+    .phone .filesbar .share { color: var(--bs-primary); cursor: default; }
+    .phone .filesbar .share.tappable { cursor: pointer; text-decoration: underline; animation: pulse 1.4s ease-in-out infinite; }
+    .phone .notepad { padding: 12px 14px; font-size: 0.68rem; }
+    .phone .notepad .txt { background: #fff; border-radius: 8px; padding: 10px; margin-top: 8px; border: 1px solid #ddd6ea; min-height: 60px; }
+    .phone .sheet {
+      position: absolute; left: 0; right: 0; bottom: 0; background: var(--bs-sheet); border-radius: 16px 16px 0 0;
+      box-shadow: 0 -8px 24px rgba(0,0,0,0.25); padding: 12px 0 10px; min-height: 45%; max-height: 82%; display: flex; flex-direction: column;
+    }
+    .phone .sheet .title { font-weight: 600; padding: 0 14px 6px; font-size: 0.72rem; }
+    .phone .dim { position: absolute; inset: 0; background: var(--bs-dim); }
+    .phone .dialog {
+      position: absolute; left: 10px; right: 10px; top: 50%; transform: translateY(-50%); background: #fbf9ff; border-radius: 16px;
+      padding: 14px 14px 10px; box-shadow: 0 8px 28px rgba(0,0,0,0.35); z-index: 3;
+    }
+    .phone .dialog .dt { font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; }
+    .phone .dialog .code { font-weight: 700; margin-top: 8px; }
+    .phone .dialog .acts { display: flex; justify-content: flex-end; gap: 14px; margin-top: 10px; color: var(--bs-primary); font-weight: 600; }
+    .phone .dialog .acts span { cursor: pointer; padding: 4px 6px; border-radius: 6px; }
+    .phone .dialog .acts span.tappable { animation: pulse 1.4s ease-in-out infinite; background: rgba(74,93,140,0.1); }
+    .phone .dialog .acts span.done { opacity: 0.4; cursor: default; animation: none; }
+    .phone .center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px; }
+    .ring { width: 104px; height: 104px; position: relative; display: flex; align-items: center; justify-content: center; }
+    .ring svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .ring .outer { fill: none; stroke: var(--bs-ring); stroke-width: 2.2; stroke-linecap: round; }
+    .ring.spin .outer { stroke-dasharray: 60 20; animation: spin 2.4s linear infinite; transform-origin: 50% 50%; }
+    .ring .inner { fill: none; stroke: #b8b3cf; stroke-width: 1.6; stroke-dasharray: 30 10; transform-origin: 50% 50%; animation: spin 3.5s linear infinite reverse; }
+    .ring .codeval { font-family: 'JetBrains Mono', monospace; font-size: 0.95rem; color: var(--bs-ring); letter-spacing: 0.05em; }
+    .ring .mark { font-size: 2.4rem; color: var(--bs-ring); line-height: 1; }
+    .phone .toast {
+      position: absolute; left: 8px; right: 8px; top: 22px; background: #fff; border-radius: 12px; padding: 8px 10px; font-size: 0.6rem;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3); border: 1px solid #ddd6ea; z-index: 4;
+    }
+    .phone .toast b { display: block; font-size: 0.64rem; }
+    .phone .browser { padding: 10px 12px; font-size: 0.66rem; }
+    .phone .browser .url { background: #fff; border: 1px solid #ddd6ea; border-radius: 999px; padding: 5px 10px; font-family: 'JetBrains Mono', monospace; font-size: 0.55rem; overflow-wrap: anywhere; }
+    .phone .browser .page { margin-top: 10px; padding: 10px; background: #fff; border-radius: 8px; border: 1px solid #ddd6ea; min-height: 90px; }
+    .phone .idle { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--bs-muted); font-style: italic; padding: 12px; text-align: center; }
+    .phone.iphone .screen { background: #111; color: #eee; }
+    .phone.iphone .statusbar, .phone.iphone .statusbar b { color: #ddd; }
+    .phone.iphone .idle { color: #999; }
+    .phone.iphone .browser .url, .phone.iphone .browser .page { background: #1d1d1f; border-color: #333; color: #eee; }
+    .link {
+      position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 5; pointer-events: none;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: var(--accent); background: var(--bg);
+      border: 1px solid var(--accent); border-radius: 999px; padding: 0.2rem 0.6rem; white-space: nowrap; opacity: 0; transition: opacity 0.2s;
+    }
+    .link.show { opacity: 1; }
+    .link.nfc { animation: pulse 1s ease-in-out infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(196,162,78,0); } 50% { box-shadow: 0 0 0 4px rgba(196,162,78,0.35); } }
+
+    /* Log */
+    .log { list-style: none; margin-top: 1.9rem; display: flex; flex-direction: column; gap: 0.35rem; }
+    .log li { border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+    .log li.current { border-color: var(--accent); }
+    .log summary, .log .plain { padding: 0.45rem 0.7rem; font-size: 0.78rem; cursor: pointer; display: flex; gap: 0.5rem; align-items: baseline; }
+    .log .plain { cursor: default; }
+    .log .who { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: var(--accent); white-space: nowrap; min-width: 3.2rem; }
+    .log .body { padding: 0 0.7rem 0.6rem; font-size: 0.75rem; color: var(--muted); }
+    .log .body pre.hex { margin-top: 0.35rem; }
+    .log .body .lbl { color: var(--text); font-size: 0.7rem; margin-top: 0.4rem; }
+    .stepcount { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--muted); }
+
+    .flow { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 0.75rem; font-size: 0.8rem; margin-top: 0.6rem; }
+    .flow .n { font-family: 'JetBrains Mono', monospace; color: var(--accent); font-size: 0.7rem; padding-top: 0.15rem; }
+
+    .back { margin-top: 2rem; font-size: 0.85rem; }
+    .back a { color: var(--muted); text-decoration: none; }
+    .back a:hover { color: var(--accent); }
+
+    @media (max-width: 560px) {
+      .stage { grid-template-columns: 1fr; gap: 2.2rem; }
+      .link { top: 50%; }
+      .kv { grid-template-columns: 1fr; gap: 0.1rem; }
+      .kv dt { margin-top: 0.4rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ring.spin .outer, .ring .inner, .tappable, .link.nfc { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1><span>bubble<span class="accent">-</span>share</span><span class="tag">showcase</span></h1>
+    <p class="subtitle">Bubble Share, taken apart: how a FOSS Wi-Fi Aware sharing app for Android works, in demos you can poke at.</p>
+    <p class="repo"><a href="https://codeberg.org/s1m/bubble-share">codeberg.org/s1m/bubble-share</a></p>
+
+    <div class="card">
+      <h2>What Bubble Share is</h2>
+      <p><a href="https://codeberg.org/s1m/bubble-share">Bubble Share</a> is a small Android app by Simon Gougeon (<a href="https://codeberg.org/s1m">s1m</a>, of UnifiedPush) that shares files, text and links to the phone next to you. It is an alternative to AirDrop, Quick Share and Nearby Share built on <strong>Wi-Fi Aware</strong>: no internet, no shared network, no QR code. You pick a device from the share sheet and both phones show the same six-digit pairing code.</p>
+      <ul>
+        <li><strong>License</strong> AGPL-3.0 · Kotlin + Jetpack Compose · Android 10+ (<code>minSdk 29</code>, <code>targetSdk 37</code>) · v0.1.2 at the time of writing</li>
+        <li><strong>Transports</strong> Wi-Fi Aware by default, Wi-Fi Direct as an NFC-negotiated fallback, and NFC tap for pairing or for handing a link to any phone</li>
+        <li><strong>Identity</strong> an X25519 key pair per device, sealed in the Android Keystore; peers see a name and an 8-hex-digit id, and you can rotate it from Settings</li>
+      </ul>
+      <p class="note">This page is an unofficial showcase. Every byte it displays comes from a JavaScript re-implementation of the app's protocol pieces (<code>protocol.mjs</code>), checked against RFC and library test vectors. Nothing leaves your browser.</p>
+    </div>
+
+    <!-- Demo 1 -->
+    <div class="card" id="sim-card">
+      <h2>Demo · Two phones, one share</h2>
+      <p>Pick a scenario and step through a real transfer. The bytes in the log are generated live with the same encodings the app uses.</p>
+      <div class="controls" id="scenarios"></div>
+      <div class="controls" id="payloads"></div>
+      <div class="controls">
+        <button class="btn btn-primary" id="btn-next">Next step</button>
+        <button class="btn" id="btn-auto">Auto-play</button>
+        <button class="btn" id="btn-reset">Reset</button>
+        <span class="spacer"></span>
+        <span class="stepcount" id="stepcount"></span>
+      </div>
+      <div class="stage">
+        <div class="phone" id="phone-sender"><div class="screen"></div><div class="label">Sender</div></div>
+        <div class="phone" id="phone-receiver"><div class="screen"></div><div class="label">Receiver</div></div>
+        <div class="link" id="link"></div>
+      </div>
+      <ol class="log" id="log"></ol>
+    </div>
+
+    <div class="card">
+      <h2>How a share works</h2>
+      <div class="flow">
+        <span class="n">1</span><span><strong>Advertise.</strong> The receiver's app <code>publish()</code>es the Wi-Fi Aware service <code>fr.s1m.share</code> with a CBOR blob: device name, X25519 public key, and whether it accepts files. The sender's share sheet <code>subscribe()</code>s, and also publishes an informative copy with <code>r = false</code> so the receiver's "Nearby devices" list shows the sender too.</span>
+        <span class="n">2</span><span><strong>Connect.</strong> Tapping a peer sends one Wi-Fi Aware L2 message (≤255 bytes): <code>Connect{name, nonce, pubKey, kind, nFiles}</code>. Both sides compute <code>HMAC-SHA256(X25519 shared secret, "NONCE:" ‖ nonce)</code> and derive the Wi-Fi passphrase and the pairing code from it.</span>
+        <span class="n">3</span><span><strong>Consent.</strong> Each phone shows the same six digits in an Accept / Refuse dialog with a 30 s timeout. Nothing else is compared, so the code is the whole anti-MITM story: if the digits differ, somebody is in the middle.</span>
+        <span class="n">4</span><span><strong>Data path.</strong> The receiver opens a <code>ServerSocket</code>, requests a <code>TRANSPORT_WIFI_AWARE</code> network with <code>WifiAwareNetworkSpecifier(peer).setPskPassphrase(psk).setPort(port)</code>, and echoes the <code>Connect</code>. The sender requests the matching network, reads the peer's IPv6 and port from <code>WifiAwareNetworkInfo</code>, and opens one TCP socket per file. The receiver only accepts that IPv6.</span>
+        <span class="n">5</span><span><strong>Stream.</strong> Each socket carries one frame: <code>FILE_V1</code> (opcode, name, 64-bit size, bytes) or <code>TEXT_V1</code>. Files land in <code>Downloads/BubbleShare</code> through <code>MediaStore</code>; a length mismatch deletes the partial file. URLs open an app picker, other text opens the system share sheet.</span>
+      </div>
+    </div>
+
+    <!-- Demo 2 -->
+    <div class="card" id="keys-card">
+      <h2>Lab · The six-digit code</h2>
+      <p>Two throwaway identities, a fresh nonce, and the exact key schedule from <code>Crypto.kt</code>, computed here with X25519 and HMAC-SHA256. Both columns must agree.</p>
+      <div class="controls">
+        <label class="field">Device A <input type="text" id="keys-name-a" value="Pixel 6a" maxlength="40"></label>
+        <label class="field">Device B <input type="text" id="keys-name-b" value="Pixel 8a" maxlength="40"></label>
+      </div>
+      <div class="controls">
+        <button class="btn" id="keys-new-a">New identity A</button>
+        <button class="btn" id="keys-new-b">New identity B</button>
+        <button class="btn btn-primary" id="keys-new-nonce">New nonce</button>
+      </div>
+      <dl class="kv" id="keys-out"></dl>
+      <p class="note">Device id = <code>"%08x".format(pubKey.contentHashCode())</code> over the 44-byte X.509 encoding of the public key. Pairing code = <code>|Arrays.hashCode(HMAC(msk, "PAIRING_CODE"))| mod 10⁶</code>. The Wi-Fi passphrase is <code>Base64url(HMAC(msk, "WIFI_PSK"))</code>; <code>TLS_KEY_ID</code> and <code>TLS_PSK</code> feed the PSK-TLS session used over Wi-Fi Direct.</p>
+    </div>
+
+    <!-- Demo 3 -->
+    <div class="card" id="wire-card">
+      <h2>Lab · Bytes on the wire</h2>
+      <p>What the sender actually writes. Type some text, or pick a local file to see its <code>FILE_V1</code> header (only the name and size are read, nothing is uploaded).</p>
+      <div class="controls">
+        <label class="field">Text to share <input type="text" id="wire-text" value="meet at 7?" maxlength="200"></label>
+        <label class="field">…or a file <input type="file" id="wire-file"></label>
+      </div>
+      <div id="wire-out"></div>
+      <h3>The discovery blobs</h3>
+      <p class="small muted">kotlinx.serialization CBOR with its defaults: indefinite-length maps, byte arrays as arrays of signed integers, default-valued fields omitted. The <code>Connect</code> message must fit a Wi-Fi Aware message (255 bytes), which caps how long a device name can be.</p>
+      <div class="controls">
+        <label class="field">Sender device name <input type="text" id="wire-name" value="Pixel 6a" maxlength="200"></label>
+      </div>
+      <div id="wire-cbor"></div>
+    </div>
+
+    <!-- Demo 4 -->
+    <div class="card" id="nfc-card">
+      <h2>Lab · The NFC tap</h2>
+      <p>While the share sheet is open, the sender emulates an NFC Type-4 tag (<code>HostApduService</code>). A reader sees two applications on it.</p>
+      <div class="chips" id="nfc-modes"></div>
+      <div class="controls" id="nfc-controls"></div>
+      <div id="nfc-out"></div>
+    </div>
+
+    <div class="card">
+      <h2>Three transports, one handshake</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Transport</th><th>Peers found by</th><th>Pairing</th><th>Encryption</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Wi-Fi Aware</td><td>NAN publish / subscribe, no AP needed</td><td>6-digit code, Accept on both</td><td>NAN data path with a per-share PSK</td><td>Default. Hardware-dependent (<code>FEATURE_WIFI_AWARE</code>); unavailable while a hotspot is on. The author flags it as the path to iOS support.</td></tr>
+          <tr><td>Wi-Fi Direct</td><td>DNS-SD over P2P (<code>_share._tcp</code>, instance <code>&lt;id&gt;.share.s1m.fr</code>)</td><td>Code after an NFC handshake</td><td>PSK-TLS (Bouncy Castle) with keys from the same schedule</td><td>Fallback only: not preselected, chosen when an NFC tap says the other side lacks Aware. Discovery socket exchanges <code>Connect</code> for a port.</td></tr>
+          <tr><td>NFC tap</td><td>Physical contact</td><td>Implicit (the tap), code still shown</td><td>Negotiates nonce and keys, then hands off</td><td>Proprietary AID <code>F0 "s1m.share.1"</code>: transport selection, then <code>Connect</code>. A plain Type-4 NDEF URI is also served so any phone can take a link.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+
+    <div class="card">
+      <h2>Requirements and caveats</h2>
+      <ul>
+        <li>Android 10 or newer with Wi-Fi Aware hardware. Wi-Fi must be on; on Android 12 and older, location too. A running hotspot, or another app holding Wi-Fi Direct, makes Aware unavailable on many devices.</li>
+        <li>Permissions: <code>NEARBY_WIFI_DEVICES</code> (declared <code>neverForLocation</code>), <code>ACCESS_FINE_LOCATION</code> up to API 32, <code>ACCESS_LOCAL_NETWORK</code> on API 37, notifications, NFC.</li>
+        <li>Early version: the author warns that a future release may break compatibility, especially to get iOS support. Refusing a pairing is not yet signalled to the peer; it just times out.</li>
+        <li>Received files go to <code>Downloads/BubbleShare</code>; the OS picks the MIME type, so duplicates get the usual <code>(1)</code> suffix before the extension.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Compared with the usual suspects</h2>
+      <ul>
+        <li><strong>AirDrop / Quick Share</strong> are built in, cross-pollinate on Pixel 10, and are closed. Bubble Share is AGPL and reads the same way on any Android 10+ phone with Aware.</li>
+        <li><strong>LocalSend</strong> needs both devices on one LAN and uses HTTPS with a PIN. Bubble Share forms its own link over Aware, so it works where there is no network at all.</li>
+        <li><strong>Trebleshot, Warpinator</strong> and friends also assume a shared network or a QR / hotspot dance. The pitch here is "no network, no QR, six digits".</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Source and credits</h2>
+      <p>Bubble Share is © 2026 Simon Gougeon, AGPL-3.0, source on <a href="https://codeberg.org/s1m/bubble-share">Codeberg</a> with translations on <a href="https://translate.codeberg.org/projects/bubble-share/">Weblate</a>. Screens in the simulator are sketches, not screenshots. The protocol module behind these demos lives in this site's repo at <a href="https://github.com/nirokato/apps/tree/main/projects/bubble-share">projects/bubble-share</a>; run <code>node projects/bubble-share/tests/run.mjs</code> for the test suite.</p>
+    </div>
+
+    <p class="back"><a href="https://apps.andymolenda.com">&larr; apps.andymolenda.com</a></p>
+  </div>
+  <script type="module" src="app.mjs"></script>
+</body>
+</html>

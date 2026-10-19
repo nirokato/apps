@@ -11,6 +11,7 @@ Monorepo for side projects hosted under **[apps.andymolenda.com](https://apps.an
 | [weft](projects/weft/) | [weft.apps.andymolenda.com](https://weft.apps.andymolenda.com) | Veilid WASM, cr-sqlite, lit-html | Local-first topic-threaded P2P chat |
 | [peer-drop](projects/peer-drop/) | [peer-drop.apps.andymolenda.com](https://peer-drop.apps.andymolenda.com) | WebRTC, PeerJS | Browser-based P2P file and text sharing |
 | [zmk-keymap](projects/zmk-keymap/) | [zmk-keymap.apps.andymolenda.com](https://zmk-keymap.apps.andymolenda.com) | Static HTML | Landing page for a KDE Plasma ZMK keymap widget (*just for fun*) |
+| [bubble-share](projects/bubble-share/) | [bubble-share.apps.andymolenda.com](https://bubble-share.apps.andymolenda.com) | Static HTML/JS, WebCrypto | Interactive showcase of Bubble Share, a FOSS Wi-Fi Aware sharing app for Android |
 
 ## Stack
 
@@ -29,6 +30,7 @@ projects/
   weft/                  P2P chat (Veilid + cr-sqlite)
   peer-drop/             P2P file sharing (WebRTC)
   zmk-keymap/            Plasma widget landing page
+  bubble-share/          Bubble Share (Wi-Fi Aware sharing) showcase
 tofu/                    OpenTofu infrastructure
 .github/workflows/
   deploy.yml             Tofu plan/apply + deploy changed projects

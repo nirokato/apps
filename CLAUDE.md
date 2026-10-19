@@ -16,6 +16,7 @@ projects/
   peer-drop/             Browser-based P2P file and text sharing (WebRTC)
   trove/                 Semantic search for 3D prints by decor style/aesthetic
   zmk-keymap/            Landing page + download for a KDE Plasma ZMK keymap widget
+  bubble-share/          Interactive showcase of Bubble Share (FOSS Wi-Fi Aware sharing for Android)
 tofu/                    OpenTofu infrastructure (Cloudflare Pages + DNS)
 tools/
   trove-ingest/          Node script: Printables metadata -> trove index.json
@@ -45,6 +46,7 @@ The deploy matrix is auto-discovered from the `projects/` directory — **no wor
 | peer-drop | `projects/peer-drop/` | `peer-drop.apps.andymolenda.com` | P2P file and text sharing between devices via WebRTC |
 | trove | `projects/trove/` | `trove.apps.andymolenda.com` | Semantic search for 3D-printable models by decor style / aesthetic |
 | zmk-keymap | `projects/zmk-keymap/` | `zmk-keymap.apps.andymolenda.com` | Landing page for a KDE Plasma widget showing a ZMK keyboard's keymap (*just for fun*) |
+| bubble-share | `projects/bubble-share/` | `bubble-share.apps.andymolenda.com` | Interactive showcase of [Bubble Share](https://codeberg.org/s1m/bubble-share), a FOSS Wi-Fi Aware file/clipboard sharing app for Android: two-phone simulator plus key-schedule, wire-format and NFC labs |
 
 ## Project classes
 
@@ -114,6 +116,7 @@ For a *just for fun* project, tag the name: `<div class="project-name"><name><sp
 - **Exception: Weft testing** uses Playwright (headless Chromium) to test Web Worker logic in a real browser context. Run with `node projects/weft/tests/run.js`. Tests exercise the DB worker (cr-sqlite) and app logic without network access; Veilid DHT tests require a live network and are manual-only. See `projects/weft/tests/README.md` for details.
 - **Exception: Trove** stays static + CDN-only, but adds two patterns: (1) **in-browser semantic search** — `transformers.js` (MiniLM sentence embeddings) loaded from CDN, computed client-side and cached in IndexedDB; (2) a **zero-dependency Node ingest tool** (`tools/trove-ingest/ingest.mjs`) that pulls Printables metadata into `projects/trove/data/index.json`, run weekly by `.github/workflows/trove-refresh.yml`. The optional `--embed` precompute path is the only piece that needs npm, and nothing from it is committed. Ranking math is unit-tested: `node projects/trove/tests/run.mjs`.
 
+- **Exception: bubble-share** is a showcase of a third-party app (Bubble Share, AGPL-3.0, by Simon Gougeon on Codeberg), not a client for it. `protocol.mjs` re-implements the app's protocol pieces (X25519 + HMAC key schedule, kotlinx-style CBOR, TEXT_V1/FILE_V1 framing, Type-4/Bubble APDUs, NDEF) as pure functions shared by the browser page and a Node test suite: `node projects/bubble-share/tests/run.mjs`. The simulator in `app.mjs` is a sketch of the app's screens, not screenshots. When Bubble Share changes its protocol, update `protocol.mjs` and its tests from the Kotlin source, then the step text in `app.mjs`.
 - **Exception: zmk-keymap** is a landing page, not an app. The widget lives in its own repo (`nirokato/plasma-zmk-keymap`); the download button links to that repo's `releases/latest/download/` asset, so widget releases need no change here. `tiles.png` is rendered by the widget repo's `tools/preview.sh` in this site's palette.
 
 ## Deployment
