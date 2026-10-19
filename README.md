@@ -10,6 +10,7 @@ Monorepo for side projects hosted under **[apps.andymolenda.com](https://apps.an
 | [clock](projects/clock/) | [clock.apps.andymolenda.com](https://clock.apps.andymolenda.com) | Static HTML/JS | World clock across timezones |
 | [weft](projects/weft/) | [weft.apps.andymolenda.com](https://weft.apps.andymolenda.com) | Veilid WASM, cr-sqlite, lit-html | Local-first topic-threaded P2P chat |
 | [peer-drop](projects/peer-drop/) | [peer-drop.apps.andymolenda.com](https://peer-drop.apps.andymolenda.com) | WebRTC, PeerJS | Browser-based P2P file and text sharing |
+| [zmk-keymap](projects/zmk-keymap/) | [zmk-keymap.apps.andymolenda.com](https://zmk-keymap.apps.andymolenda.com) | Static HTML | Landing page for a KDE Plasma ZMK keymap widget (*just for fun*) |
 
 ## Stack
 
@@ -27,6 +28,7 @@ projects/
   clock/                 World clock
   weft/                  P2P chat (Veilid + cr-sqlite)
   peer-drop/             P2P file sharing (WebRTC)
+  zmk-keymap/            Plasma widget landing page
 tofu/                    OpenTofu infrastructure
 .github/workflows/
   deploy.yml             Tofu plan/apply + deploy changed projects
