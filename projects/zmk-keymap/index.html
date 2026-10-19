@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>zmk-keymap — apps.andymolenda.com</title>
+  <meta name="description" content="A KDE Plasma 6 widget that shows the keymap on your ZMK keyboard, read over ZMK Studio.">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0f0f0c;
+      color: #e8e4d4;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1.5;
+    }
+    .container { max-width: 600px; width: 100%; padding: 2rem; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+    h1 .accent { color: #c4a24e; }
+    .tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      font-weight: 400;
+      color: #9a9686;
+      border: 1px solid #2a2a24;
+      border-radius: 999px;
+      padding: 0.1rem 0.5rem;
+      white-space: nowrap;
+    }
+    .subtitle { color: #9a9686; font-size: 0.9rem; margin-bottom: 0.5rem; }
+    .repo { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; margin-bottom: 1.75rem; }
+    .repo a { color: #9a9686; text-decoration: none; }
+    .repo a:hover { color: #c4a24e; }
+
+    figure { margin-bottom: 1.25rem; }
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 8px;
+      border: 1px solid #2a2a24;
+    }
+    figcaption { color: #9a9686; font-size: 0.75rem; margin-top: 0.5rem; text-align: center; }
+
+    .card {
+      background: #1a1a16;
+      border: 1px solid #2a2a24;
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+      font-size: 0.875rem;
+    }
+    .card h2 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #c4a24e;
+      margin-bottom: 0.5rem;
+    }
+    .card p + p { margin-top: 0.6rem; }
+    .card ul { padding-left: 1.1rem; }
+    .card li + li { margin-top: 0.3rem; }
+    .card a { color: #c4a24e; }
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8em;
+      color: #e8e4d4;
+      background: #0f0f0c;
+      border: 1px solid #2a2a24;
+      border-radius: 4px;
+      padding: 0.05rem 0.3rem;
+      overflow-wrap: anywhere;
+    }
+    .muted { color: #9a9686; }
+
+    .download {
+      display: inline-block;
+      margin: 0.25rem 0 0.75rem;
+      padding: 0.55rem 1rem;
+      background: #c4a24e;
+      color: #0f0f0c !important;
+      border-radius: 6px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .download:hover { background: #d4b25e; }
+
+    .back { margin-top: 2rem; font-size: 0.85rem; }
+    .back a { color: #9a9686; text-decoration: none; }
+    .back a:hover { color: #c4a24e; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1><span>zmk<span class="accent">-</span>keymap</span><span class="tag">just for fun</span></h1>
+    <p class="subtitle">A KDE Plasma widget that shows the keymap on your ZMK keyboard.</p>
+    <p class="repo"><a href="https://github.com/nirokato/plasma-zmk-keymap">github.com/nirokato/plasma-zmk-keymap</a></p>
+
+    <figure>
+      <img src="tiles.png" width="536" height="500"
+           alt="Three layers of a Corne keymap drawn as tiles: Base, Lower, and Raise, with rotated thumb keys and the layer keys highlighted in gold.">
+      <figcaption>A Corne's three layers. Resize the widget and the tiles re-flow.</figcaption>
+    </figure>
+
+    <div class="card">
+      <h2>What it does</h2>
+      <p>Reads the keymap straight off the keyboard over ZMK Studio's USB connection, so the cheatsheet always matches the firmware. No zmk-config repo or keymap-drawer run to keep in sync.</p>
+      <p>Every layer is a tile on the board's real physical layout, arranged in whichever grid gives the biggest keys for the widget's shape, in your Plasma color scheme. The keymap is cached, so the widget keeps working with the keyboard unplugged.</p>
+    </div>
+
+    <div class="card">
+      <h2>What you need</h2>
+      <ul>
+        <li>KDE Plasma 6 and <code>python3</code></li>
+        <li>ZMK firmware with Studio over USB: <code>CONFIG_ZMK_STUDIO=y</code> and the <code>studio-rpc-usb-uart</code> snippet</li>
+        <li>A key bound to <code>&amp;studio_unlock</code></li>
+        <li>Access to the keyboard's serial port, usually the <code>uucp</code> or <code>dialout</code> group</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Install</h2>
+      <a class="download" href="https://github.com/nirokato/plasma-zmk-keymap/releases/latest/download/com.nirokato.zmkkeymap.plasmoid">Download .plasmoid</a>
+      <p>Right-click the desktop and choose <em>Add Widgets&hellip; &rsaquo; Get New&hellip; &rsaquo; Install Widget From Local File&hellip;</em>, add <strong>ZMK Keymap</strong>, plug the keyboard in over USB, and click <strong>Read from Keyboard</strong>.</p>
+      <p class="muted">Setup details and troubleshooting are in the <a href="https://github.com/nirokato/plasma-zmk-keymap#readme">README</a>.</p>
+    </div>
+
+    <div class="card">
+      <h2>Just for fun</h2>
+      <p>Built for my own desk and shared as-is: no issues, no pull requests, no roadmap. Fork it and make it yours under the MIT license; keep the copyright notice, and a link back is appreciated.</p>
+    </div>
+
+    <p class="back"><a href="https://apps.andymolenda.com">&larr; apps.andymolenda.com</a></p>
+  </div>
+</body>
+</html>

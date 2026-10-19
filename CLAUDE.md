@@ -15,6 +15,7 @@ projects/
   weft/                  Local-first topic-threaded P2P chat (Veilid + cr-sqlite)
   peer-drop/             Browser-based P2P file and text sharing (WebRTC)
   trove/                 Semantic search for 3D prints by decor style/aesthetic
+  zmk-keymap/            Landing page + download for a KDE Plasma ZMK keymap widget
 tofu/                    OpenTofu infrastructure (Cloudflare Pages + DNS)
 tools/
   trove-ingest/          Node script: Printables metadata -> trove index.json
@@ -43,6 +44,15 @@ The deploy matrix is auto-discovered from the `projects/` directory — **no wor
 | weft | `projects/weft/` | `weft.apps.andymolenda.com` | Local-first topic-threaded P2P chat on Veilid + cr-sqlite |
 | peer-drop | `projects/peer-drop/` | `peer-drop.apps.andymolenda.com` | P2P file and text sharing between devices via WebRTC |
 | trove | `projects/trove/` | `trove.apps.andymolenda.com` | Semantic search for 3D-printable models by decor style / aesthetic |
+| zmk-keymap | `projects/zmk-keymap/` | `zmk-keymap.apps.andymolenda.com` | Landing page for a KDE Plasma widget showing a ZMK keyboard's keymap (*just for fun*) |
+
+## Project classes
+
+Projects are unmarked by default. A **just for fun** project is shared as-is, with no support promised:
+
+- Its source repo has Issues and pull requests turned off (`gh repo edit --enable-issues=false`; `gh api -X PATCH repos/<owner>/<repo> -F has_pull_requests=false`).
+- It is MIT licensed; forks are welcome as long as the copyright notice is kept.
+- Its homepage card carries the `just for fun` tag (see Homepage link format), and its page says so near the top and in a closing "Just for fun" card.
 
 ## Design system
 
@@ -91,6 +101,8 @@ When adding a project to the homepage, follow this exact pattern:
 </a></li>
 ```
 
+For a *just for fun* project, tag the name: `<div class="project-name"><name><span class="tag">just for fun</span></div>`.
+
 ## Tech stack & conventions
 
 - **No build step.** All projects are static HTML/CSS/JS served directly.
@@ -101,6 +113,8 @@ When adding a project to the homepage, follow this exact pattern:
 - **Exception: Weft** uses vendored WASM binaries (Veilid, cr-sqlite) in `wasm/` and `lib/`. These are pre-built artifacts, not compiled in the deploy workflow. The application JS remains unbundled native ES modules consistent with repo conventions.
 - **Exception: Weft testing** uses Playwright (headless Chromium) to test Web Worker logic in a real browser context. Run with `node projects/weft/tests/run.js`. Tests exercise the DB worker (cr-sqlite) and app logic without network access; Veilid DHT tests require a live network and are manual-only. See `projects/weft/tests/README.md` for details.
 - **Exception: Trove** stays static + CDN-only, but adds two patterns: (1) **in-browser semantic search** — `transformers.js` (MiniLM sentence embeddings) loaded from CDN, computed client-side and cached in IndexedDB; (2) a **zero-dependency Node ingest tool** (`tools/trove-ingest/ingest.mjs`) that pulls Printables metadata into `projects/trove/data/index.json`, run weekly by `.github/workflows/trove-refresh.yml`. The optional `--embed` precompute path is the only piece that needs npm, and nothing from it is committed. Ranking math is unit-tested: `node projects/trove/tests/run.mjs`.
+
+- **Exception: zmk-keymap** is a landing page, not an app. The widget lives in its own repo (`nirokato/plasma-zmk-keymap`); the download button links to that repo's `releases/latest/download/` asset, so widget releases need no change here. `tiles.png` is rendered by the widget repo's `tools/preview.sh` in this site's palette.
 
 ## Deployment
 
@@ -131,6 +145,7 @@ python3 -m http.server 8000
 When making changes to this repo, check off the applicable items:
 
 - [ ] If you added a project: created `projects/<name>/index.html`, added to `tofu/variables.tf` projects set, updated homepage links, updated projects table in this file
+- [ ] If you added a *just for fun* project: tagged its homepage card and page, and turned off Issues and pull requests on its source repo (see Project classes)
 - [ ] If you changed the design system (colors, fonts, layout): updated the Design system section above and verified existing projects still match
 - [ ] If you changed the deployment workflow or added new infrastructure: updated the Deployment section above
 - [ ] If you introduced a build step, package manager, test framework, or linter: updated the Tech stack section above
