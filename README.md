@@ -12,6 +12,7 @@ Monorepo for side projects hosted under **[apps.andymolenda.com](https://apps.an
 | [peer-drop](projects/peer-drop/) | [peer-drop.apps.andymolenda.com](https://peer-drop.apps.andymolenda.com) | WebRTC, PeerJS | Browser-based P2P file and text sharing |
 | [zmk-keymap](projects/zmk-keymap/) | [zmk-keymap.apps.andymolenda.com](https://zmk-keymap.apps.andymolenda.com) | Static HTML | Landing page for a KDE Plasma ZMK keymap widget (*just for fun*) |
 | [bubble-share](projects/bubble-share/) | [bubble-share.apps.andymolenda.com](https://bubble-share.apps.andymolenda.com) | Static HTML/JS, WebCrypto | Interactive showcase of Bubble Share, a FOSS Wi-Fi Aware sharing app for Android |
+| [github-uptime](projects/github-uptime/) | [github-uptime.apps.andymolenda.com](https://github-uptime.apps.andymolenda.com) | Static HTML, Chart.js | GitHub's monthly uptime since 2017, refreshed monthly |
 
 ## Stack
 
@@ -31,10 +32,12 @@ projects/
   peer-drop/             P2P file sharing (WebRTC)
   zmk-keymap/            Plasma widget landing page
   bubble-share/          Bubble Share (Wi-Fi Aware sharing) showcase
+  github-uptime/         GitHub uptime history chart
 tofu/                    OpenTofu infrastructure
 .github/workflows/
   deploy.yml             Tofu plan/apply + deploy changed projects
   claude.yml             Claude Code GitHub Action
+  github-uptime-refresh.yml  Monthly github-uptime data refresh + deploy
 ```
 
 ## Adding a new project

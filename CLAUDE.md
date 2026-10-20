@@ -17,13 +17,16 @@ projects/
   trove/                 Semantic search for 3D prints by decor style/aesthetic
   zmk-keymap/            Landing page + download for a KDE Plasma ZMK keymap widget
   bubble-share/          Interactive showcase of Bubble Share (FOSS Wi-Fi Aware sharing for Android)
+  github-uptime/         GitHub's monthly uptime history, charted from githubstatus.com
 tofu/                    OpenTofu infrastructure (Cloudflare Pages + DNS)
 tools/
   trove-ingest/          Node script: Printables metadata -> trove index.json
+  github-uptime-ingest/  Node script: githubstatus.com uptime history -> github-uptime uptime.json
 .github/workflows/
   deploy.yml             Infrastructure (tofu plan/apply) + deploy changed projects
   claude.yml             Claude Code GitHub Action (issue/PR triggers)
   trove-refresh.yml      Rebuild trove's Printables index (scheduled + manual)
+  github-uptime-refresh.yml  Rebuild + deploy github-uptime's data (monthly + manual)
 ```
 
 ## Adding a new project
@@ -47,6 +50,7 @@ The deploy matrix is auto-discovered from the `projects/` directory — **no wor
 | trove | `projects/trove/` | `trove.apps.andymolenda.com` | Semantic search for 3D-printable models by decor style / aesthetic |
 | zmk-keymap | `projects/zmk-keymap/` | `zmk-keymap.apps.andymolenda.com` | Landing page for a KDE Plasma widget showing a ZMK keyboard's keymap (*just for fun*) |
 | bubble-share | `projects/bubble-share/` | `bubble-share.apps.andymolenda.com` | Interactive showcase of [Bubble Share](https://codeberg.org/s1m/bubble-share), a FOSS Wi-Fi Aware file/clipboard sharing app for Android: two-phone simulator plus key-schedule, wire-format and NFC labs |
+| github-uptime | `projects/github-uptime/` | `github-uptime.apps.andymolenda.com` | GitHub's monthly uptime since 2017, charted from its status page |
 
 ## Project classes
 
@@ -119,6 +123,8 @@ For a *just for fun* project, tag the name: `<div class="project-name"><name><sp
 - **Exception: bubble-share** is a showcase of a third-party app (Bubble Share, AGPL-3.0, by Simon Gougeon on Codeberg), not a client for it. `protocol.mjs` re-implements the app's protocol pieces (X25519 + HMAC key schedule, kotlinx-style CBOR, TEXT_V1/FILE_V1 framing, Type-4/Bubble APDUs, NDEF) as pure functions shared by the browser page and a Node test suite: `node projects/bubble-share/tests/run.mjs`. The simulator in `app.mjs` is a sketch of the app's screens, not screenshots. When Bubble Share changes its protocol, update `protocol.mjs` and its tests from the Kotlin source, then the step text in `app.mjs`.
 - **Exception: zmk-keymap** is a landing page, not an app. The widget lives in its own repo (`nirokato/plasma-zmk-keymap`); the download button links to that repo's `releases/latest/download/` asset, so widget releases need no change here. `tiles.png` is rendered by the widget repo's `tools/preview.sh` in this site's palette.
 
+- **Exception: github-uptime** is a no-build port of [DaMrNelson/github-historical-uptime](https://github.com/DaMrNelson/github-historical-uptime) (MIT; notice kept in `projects/github-uptime/LICENSE.txt`). Chart.js + the annotation plugin from CDN. Its container is 900px wide, not 600px, because ten years of monthly points need the width. Data comes from `tools/github-uptime-ingest/ingest.mjs` (zero-dependency Node), which scrapes `githubstatus.com/uptime/<component_id>?page=N` (`Accept: application/json`) and writes a ~20 KB per-month summary to `projects/github-uptime/data/uptime.json`; the raw scrape (~4.5 MB) is never committed. The ingest refuses to write fewer months than are committed (`--force` overrides).
+
 ## Deployment
 
 - **Platform:** Cloudflare Pages (one Pages project per project)
@@ -126,6 +132,7 @@ For a *just for fun* project, tag the name: `<div class="project-name"><name><sp
 - **Workflow:** `.github/workflows/deploy.yml` — tofu plan on PR (with comment), tofu apply + deploy on push to `main`.
 - **Auto-discovery:** The deploy job scans `projects/` at runtime to build its matrix. No manual matrix updates needed.
 - **Trove index refresh:** `.github/workflows/trove-refresh.yml` rebuilds `projects/trove/data/index.json` from the Printables API (weekly + manual dispatch) and commits to `main`, re-triggering trove's deploy. The deployed app is fully static; the ingest never runs in users' browsers.
+- **github-uptime refresh:** `.github/workflows/github-uptime-refresh.yml` re-scrapes on the 2nd of each month (~9 min, paced requests), commits only when the data changed, and deploys github-uptime itself with wrangler. Pushes made with `GITHUB_TOKEN` don't start other workflows, so `deploy.yml` never sees a bot commit; any scheduled refresh that should go live has to deploy on its own.
 - **Domains:** Homepage at `apps.andymolenda.com`, projects at `<name>.apps.andymolenda.com`.
 - **SSL:** Cloudflare Advanced Certificate Manager covers `*.apps.andymolenda.com`.
 
