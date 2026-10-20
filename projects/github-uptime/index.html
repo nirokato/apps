@@ -50,7 +50,7 @@
     .muted { color: #9a9686; }
 
     .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
-    .tabs { display: flex; gap: 0.25rem; }
+    .tabs { display: flex; gap: 0.25rem; flex-wrap: wrap; }
     .tabs button {
       font: inherit;
       font-size: 0.8rem;
@@ -76,11 +76,51 @@
     .key i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
     .note { margin-top: 0.5rem; font-size: 0.75rem; color: #9a9686; }
 
+    /* Month to date: one strip of day cells per component. */
+    .mtd { position: relative; }
+    .mtd-status { padding: 4rem 0; text-align: center; color: #9a9686; }
+    .mtd-row + .mtd-row { margin-top: 0.6rem; }
+    .mtd-row.avg { padding-bottom: 0.75rem; margin-bottom: 0.75rem; border-bottom: 1px solid #2a2a24; }
+    .mtd-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0 0.75rem; font-size: 0.8rem; margin-bottom: 0.25rem; }
+    .mtd-head .name { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; }
+    .mtd-head .name i { width: 8px; height: 8px; border-radius: 50%; }
+    .mtd-head .value { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #9a9686; }
+    .mtd-head .value b { font-weight: 400; color: #e8e4d4; }
+    .mtd-strip, .mtd-days { display: grid; gap: 2px; }
+    .mtd-strip { height: 18px; }
+    @media (max-width: 600px) { .mtd-strip { height: 16px; } }
+    .mtd-strip span { position: relative; border-radius: 2px; }
+    .mtd-strip .future { box-shadow: inset 0 0 0 1px #2a2a24; }
+    .mtd-strip .hover { outline: 1px solid #e8e4d4; outline-offset: 1px; }
+    /* An incident was posted that day but no outage time was counted. */
+    .mtd-strip .dot::after { content: ''; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: #0f0f0c; }
+    .mtd .key i { width: 10px; height: 10px; border-radius: 2px; }
+    .mtd .key i.dot { background: radial-gradient(#0f0f0c 0 2px, #0ca30c 2.5px); }
+    .mtd .key i.future { box-shadow: inset 0 0 0 1px #9a9686; }
+    .mtd-days { margin-top: 0.35rem; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #9a9686; text-align: center; }
+    .mtd-days .today { color: #c4a24e; }
+    /* Phones: a label per week plus today, never two touching. */
+    @media (max-width: 600px) { .mtd-days span:not(.wk):not(.today), .mtd-days .near { visibility: hidden; } }
+    .mtd-tip {
+      position: absolute;
+      z-index: 1;
+      pointer-events: none;
+      max-width: 280px;
+      background: #1a1a16;
+      border: 1px solid #2a2a24;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      padding: 0.5rem 0.65rem;
+      font-size: 0.75rem;
+    }
+    .mtd-tip strong { display: block; margin-bottom: 0.15rem; }
+    .mtd-tip .inc { display: block; color: #9a9686; }
+
     details summary { cursor: pointer; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #c4a24e; }
     .table-wrap { overflow-x: auto; margin-top: 0.75rem; max-height: 420px; overflow-y: auto; }
     table { border-collapse: collapse; font-size: 0.75rem; white-space: nowrap; }
     th, td { padding: 0.3rem 0.6rem; text-align: right; border-bottom: 1px solid #2a2a24; }
-    th:first-child, td:first-child { text-align: left; }
+    th:first-child, td:first-child, .left { text-align: left; }
     th { position: sticky; top: 0; background: #1a1a16; color: #9a9686; font-weight: 600; }
     td { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
 
@@ -100,20 +140,35 @@
         <div class="tabs" role="tablist" aria-label="Chart view">
           <button role="tab" aria-selected="true" data-view="average">Average</button>
           <button role="tab" aria-selected="false" data-view="breakdown">By component</button>
+          <button role="tab" aria-selected="false" data-view="mtd">Month to date</button>
         </div>
         <span class="through" id="through"></span>
       </div>
-      <div class="chart">
-        <canvas id="chart" role="img" aria-label="Line chart of GitHub's monthly uptime"></canvas>
-        <div class="chart-status" id="status">Loading&hellip;</div>
+      <div id="history">
+        <div class="chart">
+          <canvas id="chart" role="img" aria-label="Line chart of GitHub's monthly uptime"></canvas>
+          <div class="chart-status" id="status">Loading&hellip;</div>
+        </div>
+        <div class="key" id="key">
+          <span><i style="background:#0ca30c"></i>No outages</span>
+          <span><i style="background:#fab219"></i>Partial outage</span>
+          <span><i style="background:#d03b3b"></i>Major outage</span>
+          <span><i style="background:#9a9686"></i>Not recorded</span>
+        </div>
+        <p class="note">Each line starts when its component appeared on the status page. Codespaces and Copilot are left out.</p>
       </div>
-      <div class="key" id="key">
-        <span><i style="background:#0ca30c"></i>No outages</span>
-        <span><i style="background:#fab219"></i>Partial outage</span>
-        <span><i style="background:#d03b3b"></i>Major outage</span>
-        <span><i style="background:#9a9686"></i>Not recorded</span>
+      <div class="mtd" id="mtd" hidden>
+        <div id="mtd-rows"></div>
+        <div class="mtd-tip" id="mtd-tip" hidden></div>
+        <div class="key">
+          <span><i style="background:#0ca30c"></i>No outages</span>
+          <span><i style="background:#fab219"></i>Partial outage</span>
+          <span><i style="background:#d03b3b"></i>Major outage</span>
+          <span><i class="dot"></i>Incident, no outage counted</span>
+          <span><i class="future"></i>Still to come</span>
+        </div>
+        <p class="note">Read live from githubstatus.com when this tab opens. Days are UTC; today's numbers keep growing until it ends.</p>
       </div>
-      <p class="note">Each line starts when its component appeared on the status page. Codespaces and Copilot are left out.</p>
     </div>
 
     <details class="card">
@@ -123,7 +178,7 @@
 
     <div class="card">
       <h2>About the data</h2>
-      <p>Each point is a month's uptime for a component as reported by <a href="https://www.githubstatus.com/uptime">githubstatus.com/uptime</a>. The average is the plain mean of the components that existed that month, and its color marks the worst outage any of them had. The month in progress is left out until it ends.</p>
+      <p>Each point is a month's uptime for a component as reported by <a href="https://www.githubstatus.com/uptime">githubstatus.com/uptime</a>. The average is the plain mean of the components that existed that month, and its color marks the worst outage any of them had. The month in progress stays off the chart until it ends; Month to date shows it day by day, read straight from the status page when you open the tab.</p>
       <p><strong>Read the early years with care.</strong> Until December 2019 the status page posted incidents but mostly didn't count their downtime: no partial outages at all, and major outages only occasionally (none before November 2018). The near-100% line in the shaded area is what was recorded, not what happened, so the drop around the acquisition is mostly a change in bookkeeping. Months before a component was added to the status page come back as a filler 100% and are left blank here; that's also why the lines start at different times.</p>
       <p>A scheduled job pulls the full history again at the start of each month, so the page stays current without anyone clicking through the status page.</p>
     </div>
@@ -152,7 +207,10 @@
     // with no recorded outage there is "unknown", not "no outages".
     const RECORDED_FROM = '2019-12';
 
+    const STATUS_PAGE = 'https://www.githubstatus.com';
+
     const pct = (v) => (v * 100).toFixed(3) + '%';
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
     const monthName = (key, style = 'long') => {
       const [y, m] = key.split('-').map(Number);
       return new Date(Date.UTC(y, m - 1)).toLocaleString('en-US', { month: style, year: 'numeric', timeZone: 'UTC' });
@@ -380,6 +438,163 @@
       document.getElementById('table').innerHTML = `${head}<tbody>${rows.join('')}</tbody>`;
     }
 
+    // Month to date reads the status page live. It allows any origin, and an Accept
+    // header alone keeps the request simple: a preflight would get a redirect.
+    async function statusJson(path) {
+      const res = await fetch(STATUS_PAGE + path, { headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    const sumOf = (days, field) => days.reduce((s, d) => s + (d?.[field] ?? 0), 0);
+    const dayStatus = (d) => (d.m > 0 ? 'major' : d.p > 0 ? 'partial' : 'ok');
+    const outageText = (p, m) =>
+      [m > 0 && `${duration(m)} major`, p > 0 && `${duration(p)} partial`].filter(Boolean).join(' · ') || 'no outages';
+
+    async function loadMonthToDate() {
+      const { component_select_list: list } = await statusJson('/uptime');
+      const ids = new Map(list.map((c) => [c.name, c.value]));
+      const names = COMPONENTS.filter((n) => ids.has(n));
+      const pages = await Promise.all(names.map((n) => statusJson(`/uptime/${ids.get(n)}?page=1`)));
+
+      // Months come oldest first. Take the newest one with a day on the clock; days
+      // still to come have no events array.
+      const started = pages[0].months.filter((m) => m.days.some((d) => d.events !== undefined));
+      const key = started[started.length - 1].days[0].date.slice(0, 7);
+      const components = names.map((name, i) => {
+        const month = pages[i].months.find((m) => m.days[0].date.startsWith(key));
+        if (!month) throw new Error(`no ${key} for ${name}`);
+        return {
+          name,
+          color: SERIES[COMPONENTS.indexOf(name)],
+          uptime: month.uptime_percentage,
+          days: month.days.map((d) => (d.events === undefined ? null : { p: d.p ?? 0, m: d.m ?? 0, events: d.events })),
+        };
+      });
+      const average = {
+        name: `Average of ${components.length} components`,
+        isAverage: true,
+        uptime: components.reduce((s, c) => s + c.uptime, 0) / components.length,
+        affected: components.filter((c) => sumOf(c.days, 'p') + sumOf(c.days, 'm') > 0).length,
+        days: components[0].days.map((_, i) => {
+          const day = components.map((c) => c.days[i]).filter(Boolean);
+          if (!day.length) return null;
+          const events = [...new Map(day.flatMap((d) => d.events).map((e) => [e.code, e])).values()];
+          return { p: sumOf(day, 'p'), m: sumOf(day, 'm'), events };
+        }),
+      };
+      return {
+        key,
+        nDays: average.days.length,
+        lastDay: average.days.findLastIndex(Boolean) + 1,
+        rows: [average, ...components],
+      };
+    }
+
+    const dayName = (mtd, i) => {
+      const [y, m] = mtd.key.split('-').map(Number);
+      return new Date(Date.UTC(y, m - 1, i + 1)).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+    };
+    const mtdLabel = (mtd) => {
+      const month = monthName(mtd.key).split(' ')[0];
+      return `${month} 1${mtd.lastDay > 1 ? `–${mtd.lastDay}` : ''} · live`;
+    };
+
+    function renderMtd(mtd) {
+      const cols = `grid-template-columns: repeat(${mtd.nDays}, 1fr)`;
+      const rows = mtd.rows.map((row, r) => {
+        const cells = row.days.map((d) => {
+          if (!d) return '<span class="future"></span>';
+          const s = dayStatus(d);
+          return `<span class="${s === 'ok' && d.events.length ? 'dot' : ''}" style="background:${STATUS[s]}"></span>`;
+        }).join('');
+        const summary = row.isAverage
+          ? (row.affected ? `${row.affected} with outages` : 'no outages')
+          : outageText(sumOf(row.days, 'p'), sumOf(row.days, 'm'));
+        const swatch = row.isAverage ? '' : `<i style="background:${row.color}"></i>`;
+        return `<div class="mtd-row${row.isAverage ? ' avg' : ''}" data-row="${r}">
+          <div class="mtd-head"><span class="name">${swatch}${row.name}</span><span class="value"><b>${pct(row.uptime)}</b> · ${summary}</span></div>
+          <div class="mtd-strip" style="${cols}" role="img" aria-label="${row.name}, ${mtdLabel(mtd).replace(' · live', '')}: ${pct(row.uptime)} uptime, ${summary}">${cells}</div>
+        </div>`;
+      });
+      const days = Array.from({ length: mtd.nDays }, (_, i) => {
+        const n = i + 1;
+        const cls = [n % 7 === 1 && 'wk', n === mtd.lastDay && 'today', n !== mtd.lastDay && Math.abs(n - mtd.lastDay) <= 2 && 'near'];
+        return `<span class="${cls.filter(Boolean).join(' ')}">${n}</span>`;
+      });
+      document.getElementById('mtd-rows').innerHTML = `${rows.join('')}<div class="mtd-days" style="${cols}" aria-hidden="true">${days.join('')}</div>`;
+    }
+
+    function tipHtml(mtd, row, i) {
+      const today = i === mtd.lastDay - 1 ? ', so far' : '';
+      const d = row.days[i];
+      const title = `<strong>${dayName(mtd, i)}${today}</strong>`;
+      if (!d) return `${title}<span class="inc">Still to come</span>`;
+      const incidents = d.events.map((e) => `<span class="inc">${esc(e.name)}</span>`).join('');
+      if (row.isAverage) {
+        const hit = mtd.rows.slice(1).filter((c) => c.days[i] && (c.days[i].p || c.days[i].m));
+        const lines = hit.map((c) => `<span>${c.name}: ${outageText(c.days[i].p, c.days[i].m)}</span>`);
+        return `${title}${lines.length ? lines.join('<br>') : 'No outages'}${incidents}`;
+      }
+      const lines = [d.m > 0 && `Major outage ${duration(d.m)}`, d.p > 0 && `Partial outage ${duration(d.p)}`].filter(Boolean);
+      if (!lines.length) lines.push(d.events.length ? 'No outage counted' : 'No outages');
+      return `${title}${lines.join('<br>')}${incidents}`;
+    }
+
+    // Hover or tap anywhere over a strip: the whole column is the target, not the 8px cell.
+    function bindMtdTip(mtd) {
+      const root = document.getElementById('mtd');
+      const rows = document.getElementById('mtd-rows');
+      const tip = document.getElementById('mtd-tip');
+      let hovered = -1;
+      const highlight = (i) => {
+        if (i === hovered) return;
+        rows.querySelectorAll('.mtd-strip').forEach((s) => {
+          s.children[hovered]?.classList.remove('hover');
+          s.children[i]?.classList.add('hover');
+        });
+        hovered = i;
+      };
+      const hide = () => { tip.hidden = true; highlight(-1); };
+      const show = (e) => {
+        const rowEl = e.target.closest('.mtd-row');
+        const strip = rowEl?.querySelector('.mtd-strip');
+        if (!strip) return hide();
+        const r = strip.getBoundingClientRect();
+        const x = e.clientX - r.left;
+        if (x < 0 || x > r.width) return hide();
+        const i = Math.min(mtd.nDays - 1, Math.floor((x / r.width) * mtd.nDays));
+        highlight(i);
+        tip.innerHTML = tipHtml(mtd, mtd.rows[Number(rowEl.dataset.row)], i);
+        tip.hidden = false;
+        const box = root.getBoundingClientRect();
+        const center = r.left - box.left + ((i + 0.5) / mtd.nDays) * r.width;
+        tip.style.left = `${Math.max(0, Math.min(box.width - tip.offsetWidth, center - tip.offsetWidth / 2))}px`;
+        // Above the strip if it fits in the viewport, else below.
+        const above = r.top - tip.offsetHeight - 8 > 0;
+        tip.style.top = `${above ? r.top - box.top - tip.offsetHeight - 8 : r.bottom - box.top + 8}px`;
+      };
+      rows.addEventListener('pointermove', show);
+      rows.addEventListener('pointerdown', show);
+      rows.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') hide(); });
+      document.addEventListener('pointerdown', (e) => { if (!rows.contains(e.target)) hide(); });
+    }
+
+    function renderMtdTable(mtd) {
+      const head = '<thead><tr><th>Day</th><th class="left">Component</th><th>Partial</th><th>Major</th><th class="left">Incident</th></tr></thead>';
+      const rows = [];
+      for (let i = mtd.lastDay - 1; i >= 0; i--) {
+        for (const c of mtd.rows.slice(1)) {
+          const d = c.days[i];
+          if (!d || !(d.events.length || d.p || d.m)) continue;
+          const links = d.events.map((e) => `<a href="${STATUS_PAGE}/incidents/${encodeURIComponent(e.code)}">${esc(e.name)}</a>`).join('; ');
+          rows.push(`<tr><td>${dayName(mtd, i)}</td><td class="left">${c.name}</td><td>${d.p ? duration(d.p) : '–'}</td><td>${d.m ? duration(d.m) : '–'}</td><td class="left">${links}</td></tr>`);
+        }
+      }
+      const body = rows.length ? rows.join('') : '<tr><td colspan="5">No incidents so far this month.</td></tr>';
+      document.getElementById('table').innerHTML = `${head}<tbody>${body}</tbody>`;
+    }
+
     async function main() {
       const status = document.getElementById('status');
       let data;
@@ -398,21 +613,61 @@
       Chart.defaults.color = INK.secondary;
 
       const avg = average(data);
-      document.getElementById('through').textContent = `through ${monthName(data.meta.through)}`;
+      const through = document.getElementById('through');
+      through.textContent = `through ${monthName(data.meta.through)}`;
       renderTable(data, avg);
 
       let view = 'average';
       let chart = render(view, data, avg);
       const key = document.getElementById('key');
-      document.querySelectorAll('.tabs button').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          if (btn.dataset.view === view) return;
-          view = btn.dataset.view;
-          document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b === btn)));
+      const historyEl = document.getElementById('history');
+      const mtdEl = document.getElementById('mtd');
+      const mtdRows = document.getElementById('mtd-rows');
+
+      // Fetched on the first visit to the tab, then kept; a failure is retried on the next visit.
+      let mtdLoad = null;
+      function showMonthToDate() {
+        through.textContent = '';
+        document.getElementById('table').innerHTML = '';
+        if (!mtdLoad) {
+          mtdRows.innerHTML = '<p class="mtd-status">Loading from githubstatus.com&hellip;</p>';
+          mtdLoad = loadMonthToDate().then((mtd) => { renderMtd(mtd); bindMtdTip(mtd); return mtd; });
+          mtdLoad.catch((err) => {
+            mtdLoad = null;
+            mtdRows.innerHTML = `<p class="mtd-status">Couldn't reach githubstatus.com (${esc(err.message)}). <a href="${STATUS_PAGE}">Open the status page</a>.</p>`;
+          });
+        }
+        mtdLoad.then((mtd) => {
+          if (view !== 'mtd') return;
+          through.textContent = mtdLabel(mtd);
+          renderMtdTable(mtd);
+        }, () => {});
+      }
+
+      const tabs = document.querySelectorAll('.tabs button');
+      const select = (btn) => {
+        if (btn.dataset.view === view) return;
+        view = btn.dataset.view;
+        tabs.forEach((b) => b.setAttribute('aria-selected', String(b === btn)));
+        historyEl.hidden = view === 'mtd';
+        mtdEl.hidden = view !== 'mtd';
+        if (view === 'mtd') {
+          chart.destroy();
+          chart = null;
+          showMonthToDate();
+        } else {
           key.hidden = view !== 'average';
+          through.textContent = `through ${monthName(data.meta.through)}`;
           chart = render(view, data, avg, chart);
-        });
-      });
+          renderTable(data, avg);
+        }
+      };
+      tabs.forEach((btn) => btn.addEventListener('click', () => {
+        select(btn);
+        history.replaceState(null, '', view === 'mtd' ? '#mtd' : location.pathname);
+      }));
+      // #mtd links straight to Month to date.
+      if (location.hash === '#mtd') select(document.querySelector('[data-view="mtd"]'));
     }
 
     main();
