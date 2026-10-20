@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>github-uptime — apps.andymolenda.com</title>
+  <meta name="description" content="GitHub's monthly uptime since 2017, charted from its own status page and refreshed monthly.">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { color-scheme: dark; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0f0f0c;
+      color: #e8e4d4;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      line-height: 1.5;
+    }
+    /* Wider than the usual 600px: ten years of months need the room. */
+    .container { max-width: 900px; width: 100%; padding: 2rem; }
+    @media (max-width: 600px) { .container { padding: 1.5rem 1rem; } }
+    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+    h1 .accent { color: #c4a24e; }
+    .subtitle { color: #9a9686; font-size: 0.9rem; margin-bottom: 0.5rem; }
+    .repo { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; margin-bottom: 1.5rem; overflow-wrap: anywhere; }
+    .repo a { color: #9a9686; text-decoration: none; }
+    .repo a:hover { color: #c4a24e; }
+
+    .card {
+      background: #1a1a16;
+      border: 1px solid #2a2a24;
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+      font-size: 0.875rem;
+    }
+    @media (max-width: 600px) { .card { padding: 1rem; } }
+    .card h2 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #c4a24e;
+      margin-bottom: 0.5rem;
+    }
+    .card p + p { margin-top: 0.6rem; }
+    .card a { color: #c4a24e; }
+    .muted { color: #9a9686; }
+
+    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+    .tabs { display: flex; gap: 0.25rem; }
+    .tabs button {
+      font: inherit;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #9a9686;
+      background: none;
+      border: 1px solid #2a2a24;
+      border-radius: 6px;
+      padding: 0.3rem 0.75rem;
+      cursor: pointer;
+    }
+    .tabs button:hover { color: #e8e4d4; }
+    .tabs button[aria-selected="true"] { color: #0f0f0c; background: #c4a24e; border-color: #c4a24e; }
+    .through { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #9a9686; }
+
+    .chart { position: relative; height: 380px; }
+    @media (max-width: 600px) { .chart { height: 300px; } }
+    .chart-status { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #9a9686; }
+
+    .key { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.75rem; font-size: 0.75rem; color: #9a9686; }
+    .key[hidden] { display: none; }
+    .key span { display: inline-flex; align-items: center; gap: 0.35rem; }
+    .key i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .note { margin-top: 0.5rem; font-size: 0.75rem; color: #9a9686; }
+
+    details summary { cursor: pointer; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #c4a24e; }
+    .table-wrap { overflow-x: auto; margin-top: 0.75rem; max-height: 420px; overflow-y: auto; }
+    table { border-collapse: collapse; font-size: 0.75rem; white-space: nowrap; }
+    th, td { padding: 0.3rem 0.6rem; text-align: right; border-bottom: 1px solid #2a2a24; }
+    th:first-child, td:first-child { text-align: left; }
+    th { position: sticky; top: 0; background: #1a1a16; color: #9a9686; font-weight: 600; }
+    td { font-family: 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+
+    .back { margin-top: 2rem; font-size: 0.85rem; }
+    .back a { color: #9a9686; text-decoration: none; }
+    .back a:hover { color: #c4a24e; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>github<span class="accent">-</span>uptime</h1>
+    <p class="subtitle">GitHub's monthly uptime since 2017, from its own status page.</p>
+    <p class="repo"><a href="https://github.com/nirokato/apps/tree/main/projects/github-uptime">github.com/nirokato/apps/tree/main/projects/github-uptime</a></p>
+
+    <div class="card">
+      <div class="toolbar">
+        <div class="tabs" role="tablist" aria-label="Chart view">
+          <button role="tab" aria-selected="true" data-view="average">Average</button>
+          <button role="tab" aria-selected="false" data-view="breakdown">By component</button>
+        </div>
+        <span class="through" id="through"></span>
+      </div>
+      <div class="chart">
+        <canvas id="chart" role="img" aria-label="Line chart of GitHub's monthly uptime"></canvas>
+        <div class="chart-status" id="status">Loading&hellip;</div>
+      </div>
+      <div class="key" id="key">
+        <span><i style="background:#0ca30c"></i>No outages</span>
+        <span><i style="background:#fab219"></i>Partial outage</span>
+        <span><i style="background:#d03b3b"></i>Major outage</span>
+        <span><i style="background:#9a9686"></i>Not recorded</span>
+      </div>
+      <p class="note">Each line starts when its component appeared on the status page. Codespaces and Copilot are left out.</p>
+    </div>
+
+    <details class="card">
+      <summary>Table view</summary>
+      <div class="table-wrap"><table id="table"></table></div>
+    </details>
+
+    <div class="card">
+      <h2>About the data</h2>
+      <p>Each point is a month's uptime for a component as reported by <a href="https://www.githubstatus.com/uptime">githubstatus.com/uptime</a>. The average is the plain mean of the components that existed that month, and its color marks the worst outage any of them had. The month in progress is left out until it ends.</p>
+      <p><strong>Read the early years with care.</strong> Until December 2019 the status page posted incidents but mostly didn't count their downtime: no partial outages at all, and major outages only occasionally (none before November 2018). The near-100% line in the shaded area is what was recorded, not what happened, so the drop around the acquisition is mostly a change in bookkeeping. Months before a component was added to the status page come back as a filler 100% and are left blank here; that's also why the lines start at different times.</p>
+      <p>A scheduled job pulls the full history again at the start of each month, so the page stays current without anyone clicking through the status page.</p>
+    </div>
+
+    <div class="card">
+      <h2>Credit</h2>
+      <p>A no-build port of <a href="https://github.com/DaMrNelson/github-historical-uptime">github-historical-uptime</a> by Nelson Schramm (<a href="LICENSE.txt">MIT</a>), with the data refreshed. Not affiliated with GitHub.</p>
+    </div>
+
+    <p class="back"><a href="https://apps.andymolenda.com">&larr; apps.andymolenda.com</a></p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.1.0/dist/chartjs-plugin-annotation.min.js"></script>
+  <script>
+    // Components present for the whole dataset. Codespaces and Copilot launched later
+    // and report synthetic months before launch, so they would skew the average.
+    const COMPONENTS = ['API Requests', 'Actions', 'Git Operations', 'Issues', 'Packages', 'Pages', 'Pull Requests', 'Webhooks'];
+    // Fixed slot order, validated for CVD separation on #1a1a16. Color follows the component.
+    const SERIES = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
+    const STATUS = { ok: '#0ca30c', partial: '#fab219', major: '#d03b3b', unknown: '#9a9686' };
+    const INK = { primary: '#e8e4d4', secondary: '#9a9686', border: '#2a2a24', surface: '#1a1a16' };
+    const ACQUIRED = { month: '2018-10', day: 26 };
+    // Before this month the status page posted incidents but rarely counted their
+    // downtime (no partial outages at all, majors only now and then), so a month
+    // with no recorded outage there is "unknown", not "no outages".
+    const RECORDED_FROM = '2019-12';
+
+    const pct = (v) => (v * 100).toFixed(3) + '%';
+    const monthName = (key, style = 'long') => {
+      const [y, m] = key.split('-').map(Number);
+      return new Date(Date.UTC(y, m - 1)).toLocaleString('en-US', { month: style, year: 'numeric', timeZone: 'UTC' });
+    };
+    const duration = (s) => {
+      const min = Math.round(s / 60);
+      if (min < 60) return `${min} min`;
+      return `${Math.floor(min / 60)} h ${min % 60} min`;
+    };
+    const outageColor = (key, partial, major) => {
+      if (major > 0) return STATUS.major;
+      if (key < RECORDED_FROM) return STATUS.unknown;
+      return partial > 0 ? STATUS.partial : STATUS.ok;
+    };
+
+    function average(data) {
+      return data.months.map((_, i) => {
+        const vals = COMPONENTS.map((n) => data.components[n]?.uptime[i]).filter((v) => v != null);
+        const sum = (field) => COMPONENTS.reduce((s, n) => s + (data.components[n]?.[field][i] ?? 0), 0);
+        return {
+          uptime: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null,
+          partial: sum('partial'),
+          major: sum('major'),
+        };
+      });
+    }
+
+    // Vertical hairline under the hovered month.
+    const crosshair = {
+      id: 'crosshair',
+      afterDatasetsDraw(chart) {
+        const active = chart.tooltip?.getActiveElements();
+        if (!active?.length) return;
+        const { ctx, chartArea } = chart;
+        const x = active[0].element.x;
+        ctx.save();
+        ctx.strokeStyle = INK.secondary;
+        ctx.globalAlpha = 0.5;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, chartArea.top);
+        ctx.lineTo(x, chartArea.bottom);
+        ctx.stroke();
+        ctx.restore();
+      },
+    };
+
+    function datasetsFor(view, data, avg) {
+      if (view === 'average') {
+        const colors = avg.map((a, i) => outageColor(data.months[i], a.partial, a.major));
+        return [{
+          label: 'Average of 8 components',
+          data: avg.map((a) => a.uptime),
+          meta: avg,
+          borderWidth: 2,
+          pointRadius: (ctx) => (ctx.chart.width < 560 ? 2 : 3),
+          pointHoverRadius: 5,
+          pointBackgroundColor: colors,
+          pointBorderColor: colors,
+          segment: { borderColor: (ctx) => colors[ctx.p1DataIndex] },
+          spanGaps: true,
+        }];
+      }
+      return COMPONENTS.map((name, i) => {
+        const c = data.components[name];
+        return {
+          label: name,
+          data: c ? c.uptime : [],
+          meta: c ? c.uptime.map((_, j) => ({ partial: c.partial[j] ?? 0, major: c.major[j] ?? 0 })) : [],
+          borderColor: SERIES[i],
+          backgroundColor: SERIES[i],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          spanGaps: true,
+        };
+      });
+    }
+
+    function render(view, data, avg, previous) {
+      previous?.destroy();
+      const datasets = datasetsFor(view, data, avg);
+      const values = datasets.flatMap((d) => d.data).filter((v) => v != null);
+      const minY = Math.min(...values);
+      const maxY = Math.max(...values);
+      const pad = (maxY - minY) * 0.1;
+      const acquired = data.months.indexOf(ACQUIRED.month) + (ACQUIRED.day - 1) / 31;
+      const recorded = data.months.indexOf(RECORDED_FROM) - 0.5;
+
+      return new Chart(document.getElementById('chart'), {
+        type: 'line',
+        data: { labels: data.months, datasets },
+        plugins: [crosshair],
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          interaction: { mode: 'index', intersect: false },
+          layout: { padding: { top: 4 } },
+          scales: {
+            x: {
+              grid: { display: false },
+              border: { color: INK.border },
+              ticks: {
+                autoSkip: false,
+                maxRotation: 0,
+                color: INK.secondary,
+                font: { family: "'JetBrains Mono', monospace", size: 10 },
+                // One label per January; on narrow screens every other year.
+                callback(value) {
+                  const key = data.months[value];
+                  if (!key.endsWith('-01')) return null;
+                  const year = Number(key.slice(0, 4));
+                  return this.chart.width < 560 && year % 2 ? null : String(year);
+                },
+              },
+            },
+            y: {
+              min: minY - pad,
+              max: maxY + pad,
+              grid: { color: INK.border },
+              border: { display: false },
+              ticks: {
+                includeBounds: false,
+                color: INK.secondary,
+                font: { family: "'JetBrains Mono', monospace", size: 10 },
+                callback: (v) => (v > 1 ? null : (v * 100).toFixed(2) + '%'),
+              },
+            },
+          },
+          plugins: {
+            legend: {
+              display: view === 'breakdown',
+              position: 'top',
+              align: 'start',
+              labels: { color: INK.primary, usePointStyle: true, pointStyle: 'circle', boxWidth: 6, boxHeight: 6, font: { size: 11 } },
+            },
+            tooltip: {
+              backgroundColor: INK.surface,
+              borderColor: INK.border,
+              borderWidth: 1,
+              titleColor: INK.primary,
+              bodyColor: INK.primary,
+              titleFont: { family: "'Inter', sans-serif", weight: '600' },
+              bodyFont: { family: "'Inter', sans-serif" },
+              padding: 10,
+              boxPadding: 4,
+              usePointStyle: true,
+              itemSort: (a, b) => a.parsed.y - b.parsed.y,
+              callbacks: {
+                title: (items) => monthName(data.months[items[0].dataIndex]),
+                label(item) {
+                  const m = item.dataset.meta[item.dataIndex];
+                  const outages = [];
+                  if (m.partial > 0) outages.push(`partial outage ${duration(m.partial)}`);
+                  if (m.major > 0) outages.push(`major outage ${duration(m.major)}`);
+                  if (view === 'average' && data.months[item.dataIndex] < RECORDED_FROM) outages.push('outages not fully recorded yet');
+                  const head = `${item.dataset.label}: ${pct(item.parsed.y)}`;
+                  // One line per component in the breakdown, or the tooltip gets taller than the chart.
+                  return view === 'average' ? [head, ...outages] : [head, ...outages].join(' · ');
+                },
+                labelColor: (item) => {
+                  const m = item.dataset.meta[item.dataIndex];
+                  const color = view === 'average'
+                    ? outageColor(data.months[item.dataIndex], m.partial, m.major)
+                    : item.dataset.borderColor;
+                  return { borderColor: color, backgroundColor: color };
+                },
+              },
+            },
+            annotation: {
+              annotations: {
+                unrecorded: {
+                  type: 'box',
+                  xMin: 0,
+                  xMax: recorded,
+                  backgroundColor: 'rgba(154, 150, 134, 0.07)',
+                  borderWidth: 0,
+                  label: {
+                    // Too narrow to fit on phones; the key and About card still explain the shading.
+                    display: (ctx) => ctx.chart.width >= 560,
+                    content: ['outages', 'barely recorded'],
+                    textAlign: 'start',
+                    position: { x: 'start', y: 'end' },
+                    color: INK.secondary,
+                    font: { family: "'Inter', sans-serif", size: 11 },
+                    padding: 8,
+                  },
+                },
+                acquiredLine: {
+                  type: 'line',
+                  xMin: acquired,
+                  xMax: acquired,
+                  borderColor: INK.secondary,
+                  borderWidth: 1,
+                  borderDash: [4, 4],
+                },
+                acquiredLabel: {
+                  type: 'label',
+                  xValue: acquired,
+                  yValue: minY + (maxY - minY) / 2,
+                  xAdjust: -9,
+                  rotation: -90,
+                  content: 'Microsoft acquires GitHub',
+                  color: INK.secondary,
+                  font: { family: "'Inter', sans-serif", size: 11 },
+                  padding: 0,
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+
+    function renderTable(data, avg) {
+      const head = `<thead><tr><th>Month</th><th>Average</th>${COMPONENTS.map((n) => `<th>${n}</th>`).join('')}</tr></thead>`;
+      const rows = data.months.map((key, i) => {
+        const cells = COMPONENTS.map((n) => {
+          const v = data.components[n]?.uptime[i];
+          return `<td>${v == null ? '–' : pct(v)}</td>`;
+        }).join('');
+        return `<tr><td>${monthName(key, 'short')}</td><td>${avg[i].uptime == null ? '–' : pct(avg[i].uptime)}</td>${cells}</tr>`;
+      }).reverse();
+      document.getElementById('table').innerHTML = `${head}<tbody>${rows.join('')}</tbody>`;
+    }
+
+    async function main() {
+      const status = document.getElementById('status');
+      let data;
+      try {
+        const res = await fetch('data/uptime.json');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        data = await res.json();
+      } catch (err) {
+        status.textContent = `Couldn't load the data (${err.message}).`;
+        return;
+      }
+      await document.fonts.ready;
+      status.remove();
+
+      Chart.defaults.font.family = "'Inter', sans-serif";
+      Chart.defaults.color = INK.secondary;
+
+      const avg = average(data);
+      document.getElementById('through').textContent = `through ${monthName(data.meta.through)}`;
+      renderTable(data, avg);
+
+      let view = 'average';
+      let chart = render(view, data, avg);
+      const key = document.getElementById('key');
+      document.querySelectorAll('.tabs button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          if (btn.dataset.view === view) return;
+          view = btn.dataset.view;
+          document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b === btn)));
+          key.hidden = view !== 'average';
+          chart = render(view, data, avg, chart);
+        });
+      });
+    }
+
+    main();
+  </script>
+</body>
+</html>

@@ -1,0 +1,65 @@
+name: Refresh github-uptime data
+
+# Rebuilds projects/github-uptime/data/uptime.json from githubstatus.com, commits
+# it to main, and deploys the project.
+#
+# Notes:
+# - Deploys here instead of relying on deploy.yml: a push made with GITHUB_TOKEN
+#   does not start other workflows, so the commit alone would never go live.
+# - The ingest refuses to write fewer months than are already committed, so a
+#   broken scrape fails the run instead of shrinking the chart.
+# - Monthly on the 2nd: only finished months are kept, so that's when new data lands.
+
+on:
+  schedule:
+    - cron: "37 6 2 * *" # 2nd of each month, 06:37 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: github-uptime-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Scrape githubstatus.com
+        run: node tools/github-uptime-ingest/ingest.mjs
+
+      - name: Commit & push if changed
+        id: commit
+        run: |
+          # generatedAt changes every run; only commit when the data itself moved.
+          if git diff --unified=0 -- projects/github-uptime/data | grep '^[-+] ' | grep -vq '"meta"'; then
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add projects/github-uptime/data
+            git commit -m "chore(github-uptime): refresh data"
+            git push origin main
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Data unchanged, nothing to commit."
+            git checkout -- projects/github-uptime/data
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        if: steps.commit.outputs.changed == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy projects/github-uptime --project-name=andy-apps-github-uptime --branch=main
