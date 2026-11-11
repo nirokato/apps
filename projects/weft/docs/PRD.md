@@ -762,7 +762,7 @@ All `CLAUDE.md` updates have been applied:
 | Veilid WASM unstable / crashes in browser | Medium | App unusable for live sync | App still works offline via cr-sqlite; export/import provides sync fallback |
 | cr-sqlite WASM + Veilid WASM memory pressure | Low | Browser tab crash on low-memory devices | Monitor memory; consider shared memory buffer; test on mobile Safari |
 | Veilid network too small for reliable DHT | Low (Andy runs own node) | DHT records not findable | Home node stores own records; direct AppCall to known peers as fallback |
-| Cloudflare Tunnel latency for WSS bootstrap | Low | Slow initial connection | Acceptable for bootstrap; once connected, traffic routes through Veilid mesh directly |
+| HTTPS peer connection gap (pre-0.6.0) | Resolved by 0.6.0 | No cross-peer messaging from HTTPS | Veilid 0.6.0 WebTransport replaces WSS workarounds. Until then, local-first features work; export/import provides offline sync. |
 | Safari IndexedDB eviction | Medium (mobile) | Loss of chat history | Export reminder; periodic auto-export to download; clear warning on Safari |
 | cr-sqlite WASM API changes | Low | Breaking changes on update | Pin specific version; vendored binary |
 
@@ -824,15 +824,13 @@ Recommended order of implementation for Claude Code Web:
     - Built from source with `enable-protocol-wss` + `async-tls` dep fix (musl static binary)
     - RSA 2048 cert via acme.sh, Cloudflare tunnel removed, direct A record DNS
     - WASM client reaches OverAttached on `http://localhost` (with hosts file override)
-20c. **BLOCKER: Bootstrap is one-shot, no persistent WSS peer connection** ← **CURRENT**
-    - Bootstrap via WSS works (B01T response in ~1s from HTTPS pages)
-    - But the WSS connection closes after bootstrap — no persistent peer link
-    - After bootstrap, WASM tries to connect to discovered peers via `ws://` → blocked on HTTPS
-    - Need to establish persistent WSS peer connection to Andy's node after bootstrap
-    - Chicken-and-egg: need WSS peer to join network, can only discover WSS peers from network
-    - See: [docs/wss-transport-blockers.md](wss-transport-blockers.md) for full analysis
-21. Implement presence updates in DHT subkeys (after WSS peer connection resolved)
-22. Test: two browser tabs can exchange messages in real-time
+20c. **WAITING: Persistent peer connection from HTTPS** — blocked on Veilid 0.6.0 (WebTransport)
+    - Bootstrap via WSS works, but connection is one-shot — no persistent peer link from HTTPS
+    - All discovered peers only advertise `ws://` → blocked by mixed content on HTTPS pages
+    - **Veilid 0.6.0 (WebTransport) will resolve this** — self-signed certs, works in HTTPS secure context
+    - See: [docs/wss-transport-blockers.md](wss-transport-blockers.md) for full analysis + roadmap
+21. Implement presence updates in DHT subkeys (after WebTransport / 0.6.0)
+22. Test: two browser tabs can exchange messages in real-time (after WebTransport / 0.6.0)
 
 ### Phase 4: Sync — NOT STARTED
 23. ~~Implement cr-sqlite changeset extraction (`crsql_changes`)~~ (primitives exist in db-worker: `getChanges`/`applyChanges`)
