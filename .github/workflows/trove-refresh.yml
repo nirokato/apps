@@ -6,6 +6,9 @@ name: Refresh trove index
 # Notes:
 # - The Printables API is unofficial/undocumented. If a run fails or indexes 0
 #   models, the schema has likely drifted — update tools/trove-ingest/ingest.mjs.
+# - Datacenter IPs (Actions runners) are Cloudflare-403'd by Printables. Add a
+#   SCRAPER_API_KEY repo secret to route through a residential unblocker; without
+#   it the ingest runs direct and will likely be blocked from CI.
 # - This pushes directly to main. If main is branch-protected against direct
 #   pushes, switch this to open a PR instead (e.g. peter-evans/create-pull-request).
 
@@ -17,6 +20,10 @@ on:
       limit:
         description: "Max models to index"
         default: "400"
+        required: false
+      tier:
+        description: "ScraperAPI tier (standard | premium | ultra_premium)"
+        default: "premium"
         required: false
 
 permissions:
@@ -42,6 +49,11 @@ jobs:
 
       - name: Build index
         run: node tools/trove-ingest/ingest.mjs --limit "${{ github.event.inputs.limit || '400' }}"
+        env:
+          # Optional residential-unblocker route (Printables 403s datacenter IPs).
+          # Add a SCRAPER_API_KEY repo secret to enable; without it, runs direct.
+          SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
+          SCRAPER_API_TIER: ${{ github.event.inputs.tier || 'premium' }}
 
       - name: Commit & push if changed
         run: |

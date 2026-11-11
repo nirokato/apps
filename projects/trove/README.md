@@ -95,6 +95,28 @@ npm i @xenova/transformers && \
 > `GQL_QUERY` + `normalize()` in `tools/trove-ingest/ingest.mjs`. Nothing else
 > depends on that shape — the app only consumes the normalized JSON.
 
+### Getting past Cloudflare
+
+Printables sits behind Cloudflare, which **403s requests from datacenter IPs**
+(GitHub Actions runners, cloud sandboxes) regardless of headers. Two ways
+through:
+
+- **Run it from a residential IP** (your own machine) — often just works with
+  the browser headers the ingest already sends.
+- **Route through a residential unblocker** for CI — set a `SCRAPER_API_KEY`
+  repo secret (default provider: [ScraperAPI](https://www.scraperapi.com/); a
+  free tier covers a weekly refresh). The ingest auto-routes through it when the
+  key is present, else runs direct. Tier defaults to `premium` (residential);
+  override with `SCRAPER_API_TIER` or the workflow's `tier` input.
+
+  ```bash
+  SCRAPER_API_KEY=… node tools/trove-ingest/ingest.mjs --limit 150
+  ```
+
+  > This routes around Printables' bot protection — reasonable for low-volume
+  > public-metadata indexing with attribution, but it cuts against their ToS.
+  > For anything permanent, prefer a sanctioned API (Thingiverse/MyMiniFactory).
+
 ## Testing
 
 ```bash
