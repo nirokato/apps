@@ -267,12 +267,15 @@ function handleVeilidUpdate(update) {
     if (attachState === 'AttachedFair' || attachState === 'AttachedGood' ||
         attachState === 'AttachedStrong' || attachState === 'AttachedFull') {
       setState({ veilidState: 'connected' });
-      // Create our private route once connected
-      setupLocalRoute();
     } else if (attachState === 'AttachedWeak' || attachState === 'Attaching') {
       setState({ veilidState: 'connecting' });
     } else if (attachState === 'Detached' || attachState === 'Detaching') {
       setState({ veilidState: 'offline' });
+    }
+    // A private route can only be allocated once Veilid has published this node on the
+    // public internet, which comes after attachment. Each later update retries.
+    if (update.publicInternetReady && attachState.startsWith('Attached')) {
+      setupLocalRoute();
     }
   }
 
@@ -293,8 +296,10 @@ function handleVeilidUpdate(update) {
 }
 
 // Create our private route for receiving P2P messages
+let localRoutePending = false;
 async function setupLocalRoute() {
-  if (state.localRoute) return; // already set up
+  if (state.localRoute || localRoutePending) return;
+  localRoutePending = true;
   try {
     const route = await veilid.createPrivateRoute();
     setState({ localRoute: route });
@@ -306,6 +311,8 @@ async function setupLocalRoute() {
     }
   } catch (e) {
     log.warn('[P2P] Failed to create local route:', e.message);
+  } finally {
+    localRoutePending = false;
   }
 }
 
