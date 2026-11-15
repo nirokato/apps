@@ -283,4 +283,16 @@ Checked from Cloudflare's network (headless browser, HTTPS origin) against both 
 - **Works:** direct bootstrap over `wss://veilid.andymolenda.com:5150/ws` answers in under a second, for both client versions.
 - **Still blocked:** the answer lists only the official bootstrap nodes, as v0 records with `T5150,U5150,W5150/ws`. The client then tries `ws://` to them, which an HTTPS page may not open, and stays at `Attaching` with 0 peers. This is the same gap as "Bootstrap ≠ Persistent Peer Connection" above; the 0.5.8 upgrade does not close it by itself.
 
-**Next thing to try (new in 0.5.8):** `network.routingTable.bootstrapRecords` takes records verbatim as `veilid-server --dump-txt-record` prints them, and the short dial info form has `S<port>` for WSS. Giving the WASM client the home node's own record (with `S5150/ws`) should let it dial the node as a peer over WSS, not only as a one-shot bootstrap. Untested.
+**Tried and ruled out: a client-side bootstrap record.** Setting `network.routingTable.bootstrapRecords` in the WASM client to the home node's unsigned v0 record (`0|0|VLD0:OTV5…|veilid.andymolenda.com|S5150/ws`, with `bootstrapKeys` emptied so v0 is accepted) does not work:
+
+- The record parses and Veilid attempts the node, then logs `failed to register bootstrap peer info: peerinfo … not valid in the PublicInternet routing domain`. In WASM a hostname cannot be resolved, so the record's dial info gets the address `0.0.0.0` (`dial_info_converter.rs`), which is not a public address. Using the IP as the hostname is no better: the WSS URL would then be the IP, and the certificate is for the hostname.
+- Emptying `bootstrapKeys` also switches the client's direct bootstrap from B01T (v1) to BOOT (v0), whose answer is a sample of the server's routing table and never includes the server itself.
+
+**What the source says should work (0.5.8, untested): a signed record served by the node.** In `direct_bootstrap/v1.rs`, the B01T answer carries, for every served record whose key is the node's own, the node's published *signed* peer info, and the client prefers that signed peer info over the record ("important for browser websocket bootstrapping", per the comment). Signed peer info has the real IP and the WSS dial info, so it passes the check the unsigned record fails. For the node to serve its own record:
+
+1. Create a bootstrap signing keypair on the node and keep the secret there.
+2. Produce the node's signed v1 record (`txtrecord <keypair>` debug command; `--dump-txt-record` fails without a signing keypair).
+3. Put that record in the server's `routing_table.bootstrap_records`, and the signing public key in its `bootstrap_keys` next to the Veilid Foundation keys. The served set is the last bootstrap plus the configured records.
+4. In weft, append the same signing public key to the default `bootstrapKeys` (do not empty them), so the client stays on B01T and accepts the record.
+
+Open risk: the node must publish its WSS dial info as direct. If it publishes itself as relayed, the browser still cannot reach it.
