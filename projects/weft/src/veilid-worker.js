@@ -104,6 +104,11 @@ async function initVeilid() {
     + ' ws: ' + JSON.stringify(config.network.protocol.ws)
     + ' wss: ' + JSON.stringify(config.network.protocol.wss));
 
+  // The only node a browser on HTTPS can dial is the home node, which is IPv4-only. With both
+  // families enabled Veilid waits for four dialable IPv6 nodes before confirming the routing
+  // domain, never finds them, and never publishes peer info. Limit the client to IPv4.
+  config.network.addressTypes = ['IPV4'];
+
   config.programName = 'weft';
   config.namespace = 'weft';
 
