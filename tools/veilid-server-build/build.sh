@@ -52,7 +52,7 @@ export CC_x86_64_unknown_linux_musl=musl-gcc
 BIN="$SRC/target/$TARGET/release/veilid-server"
 
 # --- check -------------------------------------------------------------------
-file "$BIN" | grep -q 'statically linked' || die "not a static binary: $(file -b "$BIN")"
+file "$BIN" | grep -qE 'statically linked|static-pie linked' || die "not a static binary: $(file -b "$BIN")"
 VEILID_VERSION="$("$BIN" --version | awk '{print $2}')"
 "$BIN" --dump-config > "$WORK_DIR/dump-config.yaml"
 if [[ ",$VEILID_FEATURES," == *",enable-protocol-wss,"* ]]; then
