@@ -296,3 +296,11 @@ Checked from Cloudflare's network (headless browser, HTTPS origin) against both 
 4. In weft, append the same signing public key to the default `bootstrapKeys` (do not empty them), so the client stays on B01T and accepts the record.
 
 Open risk: the node must publish its WSS dial info as direct. If it publishes itself as relayed, the browser still cannot reach it.
+
+**Result (2026-11-15, preview build `bafb656`): attached from an HTTPS page.** With the pieces below in place, a browser on `https://weft.andy-apps-preview.pages.dev` bootstraps through the home node, gets 20 close nodes from it, and reaches `AttachedWeak` with 38 live peers and no failed dials:
+
+1. **Node:** serves a signed v1 bootstrap record for itself (signing key `VLD0:KG-HVX3OKB6-wMW6pxhc4I44NYXsRWfZPEevC7czSE8`, also in the node's `bootstrap_keys`), so its B01T answer carries its own signed peer info. `tcp` and `ws` are configured statically so they publish as direct. The record must be regenerated if the public IP changes.
+2. **Client config (`src/veilid-worker.js`):** the signing key is appended to the default `bootstrapKeys`, and `ws` outbound is disabled on HTTPS pages. Veilid prefers a peer's `ws` dial info over `wss` when both are direct, and the browser refuses `ws://`.
+3. **Client patch (`tools/veilid-wasm-build/patches/0001-…`):** Veilid 0.5.8 rewrites a peer's `wss` URL to its IP in the browser, which fails TLS against a hostname certificate (seen as `CloseEvent 1006`; confirmed by packet capture on the node). The patch keeps the hostname.
+
+**Still open:** the client stays at `AttachedWeak` with `public internet ready: false` (`outbound=NeedsPublishedPeerInfo inbound=NeedsDialInfoConfirmation`) in the 30 seconds observed, and no private route has been created yet, so messaging between two browsers is untested. Longer observation needs a real browser; the Cloudflare probe is limited to about a minute.
