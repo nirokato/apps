@@ -29,7 +29,7 @@ Messages are organized into **rooms** containing **topics** (threads). Each topi
 - Per-room presence subkey allocation
 - CRDT merge: independent databases converge via `crsql_changes`
 
-**Veilid 0.5.8 upgrade:** the WASM client is now 0.5.8 (was 0.5.3). Startup, crypto and local DHT operations are verified in a Web Worker; network attachment against the 0.5.3 home node has not been re-verified yet, and the results below were recorded on 0.5.3 (whose top attachment state, `OverAttached`, is `AttachedFull` in 0.5.8).
+**Veilid 0.5.8 upgrade (branch `claude/init-weft-chat-HISsP`, preview only):** the WASM client is 0.5.8 with two source patches (`tools/veilid-wasm-build/patches/`). From an HTTPS page it now attaches through the home node (`AttachedFair`), takes it as a relay and publishes peer info. It cannot go further: Veilid needs about 9 responsive nodes, the browser can only dial WSS, the home node is the only WSS node, and Veilid 0.5.8 has no outbound relay. See "Where 0.5.8 stops" in [docs/wss-transport-blockers.md](docs/wss-transport-blockers.md). The results below were recorded on 0.5.3.
 
 **WSS transport: PARTIALLY RESOLVED** — see [docs/wss-transport-blockers.md](docs/wss-transport-blockers.md) for the full journey.
 

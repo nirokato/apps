@@ -306,3 +306,27 @@ Open risk: the node must publish its WSS dial info as direct. If it publishes it
 **Still open:** the client stays at `AttachedWeak` with `public internet ready: false` (`outbound=NeedsPublishedPeerInfo inbound=NeedsDialInfoConfirmation`) in the 30 seconds observed, and no private route has been created yet, so messaging between two browsers is untested. Longer observation needs a real browser; the Cloudflare probe is limited to about a minute.
 
 **Testing from inside the home LAN does not work.** Machines there (ARES) resolve `veilid.andymolenda.com` to the node's LAN address through `/etc/hosts`, and the node drops bootstrap requests whose source address fits no routing domain. Test from outside, for example a phone on cellular. The node's packet capture of the run above confirmed the fix: one bootstrap connection, then one peer connection that completed TLS with the hostname and stayed open.
+
+---
+
+## Where 0.5.8 stops (2026-11-15, preview build `a67b032`)
+
+With the signed bootstrap record, the two source patches in `tools/veilid-wasm-build/patches/`, IPv4-only config and `ws` disabled on HTTPS, a browser on an HTTPS page now:
+
+- bootstraps through the home node over WSS and keeps a peer connection to it,
+- reaches `AttachedFair` with about 38 known peers,
+- confirms the PublicInternet routing domain,
+- takes the home node as its inbound relay and publishes its own peer info.
+
+It then stays at `stage: outbound=NeedsMoreTestedNodes inbound=ReadyToPublish`. `public internet ready` stays false and no private route can be allocated, so weft's messaging cannot run.
+
+**Why, from the 0.5.8 source (read by the node session, not re-verified line by line here):**
+
+- `controller/state.rs`, `nodes_needed_for_counts`: the node needs `min(12, max(live * 0.25, low_water_mark * 0.5))` *responsive* nodes, about 9 with 38 live peers.
+- A node is responsive only once it has answered this client. The other 37 peers were learned from find-node answers and never contacted.
+- The browser can dial only WSS. Reaching non-WSS nodes needs an outbound relay, and that is not implemented: `routing_table/mod.rs` `get_outbound_relay_peer()` is a stub that returns `None`.
+- The next gate, safety routes, needs tested nodes as hops and would hit the same wall.
+
+**So:** with a single WSS node, Veilid 0.5.8 cannot bring an HTTPS browser client to `ReadyToOperate`. It needs either roughly 9 to 12 WSS-capable nodes, an outbound-relay implementation in Veilid, or a transport every node can offer to browsers (WebTransport, planned for Veilid 0.6.0).
+
+**Unexplored:** the server's non-allowlist relay branch (`network_manager/mod.rs`, around lines 1440 to 1460) forwards a client's envelope to any node in the server's routing table. A client patch that sent traffic to other nodes through its inbound relay might work without server changes. The reply path has not been traced, and it is a larger change than the two patches above.

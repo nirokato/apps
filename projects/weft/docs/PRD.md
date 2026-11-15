@@ -826,6 +826,7 @@ Recommended order of implementation for Claude Code Web:
     - Need to establish persistent WSS peer connection to Andy's node after bootstrap
     - Chicken-and-egg: need WSS peer to join network, can only discover WSS peers from network
     - See: [docs/wss-transport-blockers.md](wss-transport-blockers.md) for full analysis
+20d. **Veilid 0.5.8 on the preview (2026-11-15):** WASM built in CI from v0.5.8 with two source patches; home node on 0.5.8 serving a signed bootstrap record. An HTTPS browser now attaches, gets a relay and publishes peer info, then stops at `outbound=NeedsMoreTestedNodes`: it can only dial WSS nodes and there is one. Blocked on more WSS nodes, an outbound relay in Veilid, or WebTransport (0.6.0). See [wss-transport-blockers.md](wss-transport-blockers.md), "Where 0.5.8 stops".
 21. Implement presence updates in DHT subkeys (after WSS peer connection resolved)
 22. Test: two browser tabs can exchange messages in real-time
 
