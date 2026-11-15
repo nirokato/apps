@@ -1,0 +1,137 @@
+name: Build Veilid WASM for weft
+
+# Rebuilds weft's vendored Veilid WASM (projects/weft/wasm/veilid/) from an
+# upstream Veilid tag with tools/veilid-wasm-build/build.sh.
+#
+# - Run it by hand to rebuild: the bundle is uploaded as an artifact and, unless
+#   open_pr is off, pushed to a veilid-wasm/<ref> branch with a draft PR.
+# - A push that changes this workflow or the build script on a claude/** branch
+#   runs the build only, so changes to the build can be checked before merging.
+#
+# The PR is a draft because a new Veilid version can change the JS API: weft's
+# worker has to be updated on that branch before it is merged and deployed.
+# A PR opened with GITHUB_TOKEN does not start other workflows; merging it does.
+
+on:
+  workflow_dispatch:
+    inputs:
+      veilid_ref:
+        description: "Veilid tag or branch (blank: the build script's default)"
+        required: false
+        default: ""
+      features:
+        description: "Cargo features, comma-separated (blank: the build script's default)"
+        required: false
+        default: ""
+      open_pr:
+        description: "Open a draft PR with the rebuilt bundle"
+        type: boolean
+        default: true
+  push:
+    branches:
+      - "claude/**"
+    paths:
+      - ".github/workflows/veilid-wasm-build.yml"
+      - "tools/veilid-wasm-build/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: veilid-wasm-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      veilid_ref: ${{ steps.info.outputs.veilid_ref }}
+      veilid_version: ${{ steps.info.outputs.veilid_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and vendor
+        env:
+          VEILID_REF: ${{ inputs.veilid_ref }}
+          VEILID_FEATURES: ${{ inputs.features }}
+          WORK_DIR: ${{ runner.temp }}/veilid-wasm-build
+        run: tools/veilid-wasm-build/build.sh
+
+      - name: Summarize
+        id: info
+        run: |
+          info=projects/weft/wasm/veilid/BUILD_INFO.json
+          echo "veilid_ref=$(jq -r .veilid_ref "$info")" >> "$GITHUB_OUTPUT"
+          echo "veilid_version=$(jq -r .veilid_version "$info")" >> "$GITHUB_OUTPUT"
+          {
+            echo "### veilid-wasm $(jq -r .veilid_version "$info")"
+            echo '```json'
+            cat "$info"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: veilid-wasm
+          path: projects/weft/wasm/veilid/
+          if-no-files-found: error
+
+  open-pr:
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.open_pr
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Replace the vendored bundle
+        run: find projects/weft/wasm/veilid -mindepth 1 -delete
+
+      - name: Download bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: veilid-wasm
+          path: projects/weft/wasm/veilid/
+
+      - name: Push branch and open a draft PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VEILID_REF: ${{ needs.build.outputs.veilid_ref }}
+          VEILID_VERSION: ${{ needs.build.outputs.veilid_version }}
+          BASE: ${{ github.ref_name }}
+        run: |
+          if [ -z "$(git status --porcelain -- projects/weft/wasm/veilid)" ]; then
+            echo "::notice::Bundle is identical to the one on $BASE; nothing to open."
+            exit 0
+          fi
+          branch="veilid-wasm/$VEILID_REF"
+          title="chore(weft): rebuild Veilid WASM from $VEILID_REF"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add -A projects/weft/wasm/veilid
+          git commit -m "$title"
+          git push --force origin "$branch"
+
+          if [ -n "$(gh pr list --head "$branch" --state open --json number --jq '.[].number')" ]; then
+            echo "::notice::Updated the existing PR for $branch."
+            exit 0
+          fi
+          {
+            echo "Rebuilt by the \`Build Veilid WASM for weft\` workflow: veilid-wasm $VEILID_VERSION from \`$VEILID_REF\`."
+            echo
+            echo '```json'
+            cat projects/weft/wasm/veilid/BUILD_INFO.json
+            echo '```'
+            echo
+            echo "Draft on purpose: merging deploys weft. Update \`projects/weft/src/veilid-worker.js\` and the app for any API changes in this Veilid version on this branch first."
+          } > "$RUNNER_TEMP/pr-body.md"
+          if ! gh pr create --draft --base "$BASE" --head "$branch" --title "$title" --body-file "$RUNNER_TEMP/pr-body.md"; then
+            echo "::warning::Pushed $branch but could not open a PR. Allow GitHub Actions to create pull requests in the repository settings, or open it by hand."
+          fi
