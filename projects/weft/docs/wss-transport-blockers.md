@@ -247,7 +247,7 @@ Features: enable-protocol-wss, enable-crypto-vld0, json-camel-case
 Built by: tools/veilid-wasm-build/build.sh (GitHub Actions: "Build Veilid WASM for weft")
 Worker patches: none (0.5.4+ detects the Worker scope; 0.5.3 needed glue patches and shims)
 Location: projects/weft/wasm/veilid/ (see BUILD_INFO.json)
-Not yet re-verified on 0.5.8: live bootstrap and attachment against the 0.5.3 home node
+Re-verified 2026-11-15 from outside the LAN: see "0.5.8 status" below
 ```
 
 ---
@@ -271,3 +271,16 @@ Not yet re-verified on 0.5.8: live bootstrap and attachment against the 0.5.3 ho
 8. **DHTSchema uses serde externally-tagged enums** (`{SMPL: {oCnt: 1, ...}}` not `{kind: 'SMPL', ...}`) and camelCase field names when compiled with `json-camel-case`.
 
 9. **WASM Worker polyfills needed:** `Window = self.constructor`, `window = self`, in-memory `localStorage` shim, `crypto` variable renamed to avoid shadowing `globalThis.crypto`.
+
+---
+
+## 0.5.8 status (2026-11-15)
+
+The infrastructure reference above describes the April setup. Since then the home node was rebuilt: it is now veilid-server 0.5.8 with `enable-protocol-wss` (built by `tools/veilid-server-build/build.sh`), on a VM at 192.168.58.30, with a renewed RSA certificate and a systemd renewal timer. The old nightly apt package, which had overwritten the WSS build on 2026-04-03, is removed.
+
+Checked from Cloudflare's network (headless browser, HTTPS origin) against both `weft.apps.andymolenda.com` (0.5.3 client) and the 0.5.8 preview at `weft.andy-apps-preview.pages.dev`:
+
+- **Works:** direct bootstrap over `wss://veilid.andymolenda.com:5150/ws` answers in under a second, for both client versions.
+- **Still blocked:** the answer lists only the official bootstrap nodes, as v0 records with `T5150,U5150,W5150/ws`. The client then tries `ws://` to them, which an HTTPS page may not open, and stays at `Attaching` with 0 peers. This is the same gap as "Bootstrap ≠ Persistent Peer Connection" above; the 0.5.8 upgrade does not close it by itself.
+
+**Next thing to try (new in 0.5.8):** `network.routingTable.bootstrapRecords` takes records verbatim as `veilid-server --dump-txt-record` prints them, and the short dial info form has `S<port>` for WSS. Giving the WASM client the home node's own record (with `S5150/ws`) should let it dial the node as a peer over WSS, not only as a one-shot bootstrap. Untested.
