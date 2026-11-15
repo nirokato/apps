@@ -92,8 +92,10 @@ async function initVeilid() {
     'VLD0:KG-HVX3OKB6-wMW6pxhc4I44NYXsRWfZPEevC7czSE8',
   ];
 
-  // WS/WSS: connect only, no listen (WASM can't accept incoming)
-  config.network.protocol.ws.connect = true;
+  // WS/WSS: connect only, no listen (WASM can't accept incoming).
+  // An HTTPS page may not open ws://, and Veilid prefers a peer's ws dial info over its wss
+  // one when both are direct, so only offer ws when the page itself is not secure.
+  config.network.protocol.ws.connect = self.location.protocol !== 'https:';
   config.network.protocol.ws.listen = false;
   config.network.protocol.wss.connect = true;
   config.network.protocol.wss.listen = false;
