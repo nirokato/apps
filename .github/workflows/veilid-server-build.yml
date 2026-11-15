@@ -1,0 +1,71 @@
+name: Build veilid-server for weft
+
+# Builds the static (musl) veilid-server with WSS that weft's home bootstrap
+# node runs, with tools/veilid-server-build/build.sh. The Debian packages are
+# built without enable-protocol-wss, so the node can't use them.
+#
+# - Run it by hand to build a tag: the binary and BUILD_INFO.json are uploaded
+#   as the `veilid-server` artifact. Install it on the node by hand.
+# - A push that changes this workflow or the build script on a claude/** branch
+#   runs the build too, so changes to the build can be checked before merging.
+
+on:
+  workflow_dispatch:
+    inputs:
+      veilid_ref:
+        description: "Veilid tag or branch (blank: the build script's default)"
+        required: false
+        default: ""
+      features:
+        description: "Cargo features, comma-separated (blank: the build script's default)"
+        required: false
+        default: ""
+  push:
+    branches:
+      - "claude/**"
+    paths:
+      - ".github/workflows/veilid-server-build.yml"
+      - "tools/veilid-server-build/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: veilid-server-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install musl
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build
+        env:
+          VEILID_REF: ${{ inputs.veilid_ref }}
+          VEILID_FEATURES: ${{ inputs.features }}
+          WORK_DIR: ${{ runner.temp }}/veilid-server-build
+          OUT_DIR: ${{ runner.temp }}/veilid-server-out
+        run: tools/veilid-server-build/build.sh
+
+      - name: Summarize
+        run: |
+          info="$RUNNER_TEMP/veilid-server-out/BUILD_INFO.json"
+          {
+            echo "### veilid-server $(jq -r .veilid_version "$info") ($(jq -r .features "$info"))"
+            echo '```json'
+            cat "$info"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: veilid-server
+          path: ${{ runner.temp }}/veilid-server-out/
+          if-no-files-found: error
