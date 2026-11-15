@@ -84,12 +84,21 @@ async function initVeilid() {
   // Port 5150 is the standard Veilid port, forwarded through the firewall.
   config.network.routingTable.bootstrap = ['wss://veilid.andymolenda.com:5150/ws'];
 
+  // The home node serves a signed bootstrap record for itself, so its answer carries its own
+  // signed peer info (real IP + wss dial info) and the browser can dial it as a peer. Trust
+  // the key that signs that record, alongside the default Veilid Foundation keys.
+  config.network.routingTable.bootstrapKeys = [
+    ...config.network.routingTable.bootstrapKeys,
+    'VLD0:KG-HVX3OKB6-wMW6pxhc4I44NYXsRWfZPEevC7czSE8',
+  ];
+
   // WS/WSS: connect only, no listen (WASM can't accept incoming)
   config.network.protocol.ws.connect = true;
   config.network.protocol.ws.listen = false;
   config.network.protocol.wss.connect = true;
   config.network.protocol.wss.listen = false;
   debugLog('[veilid-worker] Bootstrap: ' + JSON.stringify(config.network.routingTable.bootstrap)
+    + ' keys: ' + config.network.routingTable.bootstrapKeys.length
     + ' ws: ' + JSON.stringify(config.network.protocol.ws)
     + ' wss: ' + JSON.stringify(config.network.protocol.wss));
 
