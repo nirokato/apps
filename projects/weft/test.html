@@ -259,10 +259,10 @@
             const s = update.state;
             log(`Attachment state: ${s}`);
             bestState = s;
-            if (s === 'AttachedGood' || s === 'AttachedStrong' || s === 'FullyAttached' || s === 'OverAttached') {
+            if (s === 'AttachedFair' || s === 'AttachedGood' || s === 'AttachedStrong' || s === 'AttachedFull') {
               attachResolve(true);
             } else if (s === 'AttachedWeak') {
-              // Browser WASM nodes often can't reach AttachedGood — accept Weak
+              // Browser WASM nodes often can't reach AttachedFair — accept Weak
               attachResolve(true);
             }
           }
@@ -306,7 +306,7 @@
         }
 
         // Route test — requires network attachment
-        if (bestState === 'AttachedWeak' || bestState === 'AttachedGood' || bestState === 'AttachedStrong' || bestState === 'FullyAttached' || bestState === 'OverAttached') {
+        if (['AttachedWeak', 'AttachedFair', 'AttachedGood', 'AttachedStrong', 'AttachedFull'].includes(bestState)) {
           setStatus('route', 'running');
           log('Testing routing: creating private route...');
           try {

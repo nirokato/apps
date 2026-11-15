@@ -242,11 +242,12 @@ WASM build command:
 ### WASM Build
 
 ```
-Version: veilid-wasm 0.5.3
+Version: veilid-wasm 0.5.8 (was 0.5.3 for everything recorded above)
 Features: enable-protocol-wss, enable-crypto-vld0, json-camel-case
-Built in: nspawn container 'veilid-build' on ares
-Worker patches: instanceof Window + WINDOW accessor + crypto rename
-Location: projects/weft/wasm/veilid/
+Built by: tools/veilid-wasm-build/build.sh (GitHub Actions: "Build Veilid WASM for weft")
+Worker patches: none (0.5.4+ detects the Worker scope; 0.5.3 needed glue patches and shims)
+Location: projects/weft/wasm/veilid/ (see BUILD_INFO.json)
+Not yet re-verified on 0.5.8: live bootstrap and attachment against the 0.5.3 home node
 ```
 
 ---

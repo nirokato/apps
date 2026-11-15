@@ -261,9 +261,11 @@ function handleVeilidUpdate(update) {
   // Attachment state changes
   if (update.kind === 'Attachment') {
     const attachState = update.state;
-    log.info('[Veilid] Attachment:', attachState);
-    if (attachState === 'AttachedGood' || attachState === 'AttachedStrong' ||
-        attachState === 'FullyAttached' || attachState === 'OverAttached') {
+    log.info('[Veilid] Attachment:', attachState,
+      `(live peers: ${update.livePeerCount}, reliable: ${update.reliablePeerCount}, public internet ready: ${update.publicInternetReady})`);
+    // Veilid 0.5.4+ states: AttachedWeak < AttachedFair < AttachedGood < AttachedStrong < AttachedFull
+    if (attachState === 'AttachedFair' || attachState === 'AttachedGood' ||
+        attachState === 'AttachedStrong' || attachState === 'AttachedFull') {
       setState({ veilidState: 'connected' });
       // Create our private route once connected
       setupLocalRoute();

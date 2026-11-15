@@ -1,0 +1,11 @@
+{
+  "veilid_version": "0.5.8",
+  "veilid_ref": "v0.5.8",
+  "veilid_commit": "759da70be95497cfaa2e0bb8c122b16c8cac449e",
+  "features": "enable-protocol-wss",
+  "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+  "wasm_bindgen": "0.2.121",
+  "binaryen": "125",
+  "veilid_wasm_bg.wasm": { "bytes": 6367495, "sha256": "f180e716258a401f06615673bf87e721d20ebaa148ecf52f9eba61922e183150" },
+  "veilid_wasm.js": { "bytes": 443061, "sha256": "d4e43a4b32e228ed8eee8f125f15aec56d7611fda07ef42a7b200cc5596f0a27" }
+}

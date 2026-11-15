@@ -1,39 +1,8 @@
 // Veilid Web Worker — P2P networking, identity, DHT, messaging
 // Module worker: loaded with { type: 'module' }
 
-// Veilid WASM expects `window` and `localStorage` — polyfill for Worker context
-if (typeof window === 'undefined') {
-  self.window = self;
-}
-// Make Window constructor available so instanceof checks work
-if (typeof Window === 'undefined') {
-  self.Window = self.constructor;
-}
-
-// Diagnostics — log what APIs are available in this Worker
-console.log('[veilid-worker] Worker environment diagnostics:');
-console.log('  typeof window:', typeof window);
-console.log('  typeof Window:', typeof Window);
-console.log('  typeof self:', typeof self);
-console.log('  self.constructor.name:', self.constructor?.name);
-console.log('  typeof indexedDB:', typeof indexedDB);
-console.log('  typeof localStorage:', typeof localStorage);
-console.log('  typeof crypto:', typeof globalThis.crypto);
-console.log('  typeof fetch:', typeof fetch);
-console.log('  window === self:', window === self);
-console.log('  self instanceof Window:', self instanceof Window);
-if (typeof self.localStorage === 'undefined') {
-  // In-memory localStorage shim for Workers (Veilid uses it for table store)
-  const store = new Map();
-  self.localStorage = {
-    getItem: (k) => store.has(k) ? store.get(k) : null,
-    setItem: (k, v) => store.set(k, String(v)),
-    removeItem: (k) => store.delete(k),
-    clear: () => store.clear(),
-    get length() { return store.size; },
-    key: (i) => [...store.keys()][i] || null,
-  };
-}
+// Veilid 0.5.4+ detects the Worker scope itself (IndexedDB-backed stores), so no
+// window/localStorage shims are needed here.
 
 import init, {
   veilidClient,
@@ -78,6 +47,12 @@ function parseRecordKey(key) {
   return typeof key === 'string' ? RecordKey.parse(key) : key;
 }
 
+// A descriptor's owner is a KeyPair when we hold the secret (0.5.4+); only the
+// public half leaves the worker.
+function ownerPublicKey(desc) {
+  return (desc.owner.key ?? desc.owner).toString();
+}
+
 function parseKeyPair(kp) {
   return typeof kp === 'string' ? KeyPair.parse(kp) : kp;
 }
@@ -99,31 +74,24 @@ async function initVeilid() {
   // 3. Get default config and customize for browser WASM
   const config = veilidClient.defaultConfig();
 
-  // Debug: dump default config to understand what bootstrap/protocol we're working with
   function debugLog(msg) {
-    self.postMessage({ type: 'update', update: { kind: 'Log', log_level: 'Info', message: msg } });
+    self.postMessage({ type: 'update', update: { kind: 'Log', logLevel: 'Info', message: msg } });
   }
-  debugLog('[veilid-worker] Default bootstrap: ' + JSON.stringify(config.network.routingTable.bootstrap));
-  debugLog('[veilid-worker] Default WS config: ' + JSON.stringify(config.network.protocol.ws));
-  debugLog('[veilid-worker] Default WSS config: ' + JSON.stringify(config.network.protocol.wss || 'NOT PRESENT'));
+  debugLog('[veilid-worker] Veilid ' + veilidClient.versionString() + ' features: ' + JSON.stringify(veilidClient.features()));
 
   // Bootstrap directly to Andy's WSS-enabled veilid-server.
   // Must use wss:// (not ws://) from HTTPS pages to avoid mixed content blocking.
   // Port 5150 is the standard Veilid port, forwarded through the firewall.
   config.network.routingTable.bootstrap = ['wss://veilid.andymolenda.com:5150/ws'];
-  debugLog('[veilid-worker] Bootstrap: ' + JSON.stringify(config.network.routingTable.bootstrap));
 
   // WS/WSS: connect only, no listen (WASM can't accept incoming)
   config.network.protocol.ws.connect = true;
   config.network.protocol.ws.listen = false;
-  if (!config.network.protocol.wss) {
-    config.network.protocol.wss = {};
-  }
   config.network.protocol.wss.connect = true;
   config.network.protocol.wss.listen = false;
-
-  debugLog('[veilid-worker] Final WS config: ' + JSON.stringify(config.network.protocol.ws));
-  debugLog('[veilid-worker] Final WSS config: ' + JSON.stringify(config.network.protocol.wss));
+  debugLog('[veilid-worker] Bootstrap: ' + JSON.stringify(config.network.routingTable.bootstrap)
+    + ' ws: ' + JSON.stringify(config.network.protocol.ws)
+    + ' wss: ' + JSON.stringify(config.network.protocol.wss));
 
   config.programName = 'weft';
   config.namespace = 'weft';
@@ -192,7 +160,7 @@ async function createDHTRecord({ schema, owner }) {
   const desc = await routingCtx.createDHTRecord(kind, schema || { DFLT: { oCnt: 1 } }, ownerKp);
   return {
     key: desc.key.toString(),
-    owner: desc.owner.toString(),
+    owner: ownerPublicKey(desc),
     schema: desc.schema,
   };
 }
@@ -203,7 +171,7 @@ async function openDHTRecord({ key, writer }) {
   const desc = await routingCtx.openDHTRecord(recordKey, kp);
   return {
     key: desc.key.toString(),
-    owner: desc.owner.toString(),
+    owner: ownerPublicKey(desc),
     schema: desc.schema,
   };
 }
@@ -324,7 +292,7 @@ async function openRoomDHT({ dhtKey, ownerKey, ownerSecret }) {
 
   return {
     key: desc.key.toString(),
-    owner: desc.owner.toString(),
+    owner: ownerPublicKey(desc),
     schema: desc.schema,
     metadata,
   };

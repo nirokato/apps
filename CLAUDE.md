@@ -21,11 +21,13 @@ projects/
 tofu/                    OpenTofu infrastructure (Cloudflare Pages + DNS)
 tools/
   trove-ingest/          Node script: Printables metadata -> trove index.json
+  veilid-wasm-build/     Shell script: Veilid tag -> weft's vendored WASM bundle
   github-uptime-ingest/  Node script: githubstatus.com uptime history -> github-uptime uptime.json
 .github/workflows/
   deploy.yml             Infrastructure (tofu plan/apply) + deploy changed projects
   claude.yml             Claude Code GitHub Action (issue/PR triggers)
   trove-refresh.yml      Rebuild trove's Printables index (scheduled + manual)
+  veilid-wasm-build.yml  Rebuild weft's Veilid WASM from an upstream tag (manual; opens a draft PR)
   github-uptime-refresh.yml  Rebuild + deploy github-uptime's data (monthly + manual)
 ```
 
@@ -116,7 +118,7 @@ For a *just for fun* project, tag the name: `<div class="project-name"><name><sp
 - **Single-file preferred.** Keep everything in one `index.html` unless complexity demands splitting.
 - **Infrastructure as Code:** OpenTofu (v1.8+) with Cloudflare provider (~> 4.0).
 - **No test framework or linter** is currently configured for most projects.
-- **Exception: Weft** uses vendored WASM binaries (Veilid, cr-sqlite) in `wasm/` and `lib/`. These are pre-built artifacts, not compiled in the deploy workflow. The application JS remains unbundled native ES modules consistent with repo conventions.
+- **Exception: Weft** uses vendored WASM binaries (Veilid, cr-sqlite) in `wasm/` and `lib/`. These are pre-built artifacts, not compiled in the deploy workflow. The Veilid bundle in `wasm/veilid/` is produced by `tools/veilid-wasm-build/build.sh` (Rust + wasm-bindgen + wasm-opt), which the manual `veilid-wasm-build.yml` workflow runs and turns into a draft PR; never edit the generated files by hand. The application JS remains unbundled native ES modules consistent with repo conventions.
 - **Exception: Weft testing** uses Playwright (headless Chromium) to test Web Worker logic in a real browser context. Run with `node projects/weft/tests/run.js`. Tests exercise the DB worker (cr-sqlite) and app logic without network access; Veilid DHT tests require a live network and are manual-only. See `projects/weft/tests/README.md` for details.
 - **Exception: Trove** stays static + CDN-only, but adds two patterns: (1) **in-browser semantic search** — `transformers.js` (MiniLM sentence embeddings) loaded from CDN, computed client-side and cached in IndexedDB; (2) a **zero-dependency Node ingest tool** (`tools/trove-ingest/ingest.mjs`) that pulls Printables metadata into `projects/trove/data/index.json`, run weekly by `.github/workflows/trove-refresh.yml`. The optional `--embed` precompute path is the only piece that needs npm, and nothing from it is committed. Ranking math is unit-tested: `node projects/trove/tests/run.mjs`.
 

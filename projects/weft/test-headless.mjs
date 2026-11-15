@@ -33,7 +33,7 @@ chrome.stderr.on('data', (data) => {
       console.log(`${prefix} ${text}`);
       if (isError) errors.push(text);
 
-      if (text.includes('AttachedGood') || text.includes('AttachedStrong') || text.includes('FullyAttached')) {
+      if (/Attached(Fair|Good|Strong|Full)/.test(text)) {
         finish(true, text);
       }
       if (text.includes('Veilid init failed')) {

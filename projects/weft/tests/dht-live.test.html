@@ -68,8 +68,7 @@ function call(action, params, timeoutMs = 15000) {
 }
 
 function isAttached(state) {
-  return ['AttachedWeak', 'AttachedGood', 'AttachedStrong',
-          'FullyAttached', 'OverAttached'].includes(state);
+  return ['AttachedWeak', 'AttachedFair', 'AttachedGood', 'AttachedStrong', 'AttachedFull'].includes(state);
 }
 
 function waitForAttachment(timeoutMs = 90000) {

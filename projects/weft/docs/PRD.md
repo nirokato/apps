@@ -230,10 +230,8 @@ LIMIT 20;
 
 ```
 1. Load veilid-wasm in Web Worker
-2. Apply polyfills:
-   - self.window = self (Worker has no Window)
-   - self.Window = self.constructor (so instanceof Window works)
-   - self.localStorage = in-memory Map shim (Workers have no localStorage)
+2. No polyfills: Veilid 0.5.4+ detects the Worker scope and uses IndexedDB-backed stores
+   (0.5.3 needed window/Window/localStorage shims and patches to the generated glue)
 3. Call veilidClient.initializeCore(loggingConfig)
 4. Get defaultConfig() and customize:
    - network.routingTable.bootstrap = ["wss://veilid.andymolenda.com/ws"]
@@ -629,9 +627,12 @@ projects/weft/
 │   ├── ulid.js             # ULID generator (~50 lines, Crockford base32)
 │   └── constants.js        # Config: version, DB names, limits
 ├── wasm/
-│   └── veilid/             # Pre-built veilid-wasm v0.5.3 artifacts
-│       ├── veilid_wasm_bg.wasm  # ~9.5 MB
-│       └── veilid_wasm.js       # wasm-bindgen glue (~310 KB)
+│   └── veilid/             # veilid-wasm v0.5.8 bundle, from tools/veilid-wasm-build/build.sh
+│       ├── veilid_wasm_bg.wasm  # ~6.4 MB
+│       ├── veilid_wasm.js       # wasm-bindgen glue (~440 KB), unmodified
+│       ├── veilid_wasm.d.ts     # API reference for veilid-worker.js
+│       ├── veilid_errors.js     # error classes the glue imports (+ snippets/)
+│       └── BUILD_INFO.json      # Veilid tag, commit, features, tool versions, hashes
 └── lib/                    # Vendored cr-sqlite dependencies (bare specifiers rewritten)
     ├── crsqlite/            # @vlcn.io/crsqlite-wasm v0.16.0
     │   ├── index.js         # Entry point (initWasm + SQLite3 class)
@@ -654,7 +655,7 @@ projects/weft/
 |---|---|---|
 | lit-html | CDN import (`jsdelivr`) | Done |
 | cr-sqlite WASM | Vendored in `lib/crsqlite/` + `lib/wa-sqlite/` + `lib/xplat-api/` + `lib/async-mutex/` | Done (v0.16.0) |
-| veilid-wasm | Vendored in `wasm/veilid/`, built from source with `--features enable-protocol-wss` | Done (v0.5.3+wss) |
+| veilid-wasm | Vendored in `wasm/veilid/`, built from source with `--features enable-protocol-wss` | Done (v0.5.8+wss) |
 | ULID | Inline implementation in `src/ulid.js` | Done |
 | CBOR or JSON | TBD — JSON for initial implementation, CBOR if size matters | Not started |
 
@@ -669,17 +670,11 @@ projects/weft/
 - Deployed to Cloudflare Pages as static files
 - Subdomain `weft.apps.andymolenda.com` managed by OpenTofu (add to `tofu/variables.tf` projects set)
 
-**WASM build process (currently manual via nspawn container on ares):**
-1. `sudo nspawn-manager start veilid-build`
-2. `cd veilid && git fetch && git checkout <tag>`
-3. `cd veilid-wasm && wasm-pack build --release --target web -- --features enable-protocol-wss`
-4. Copy `pkg/veilid_wasm.js` and `pkg/veilid_wasm_bg.wasm` to `projects/weft/wasm/veilid/`
-5. Apply Worker compatibility patches to `veilid_wasm.js`:
-   - `__wbg_instanceof_Window`: add `|| arg0 instanceof DedicatedWorkerGlobalScope`
-   - `__wbg_static_accessor_WINDOW`: fall back to `self` when `window` is undefined
-6. Commit and PR
+**WASM build process:** `tools/veilid-wasm-build/build.sh` clones a Veilid tag (default `v0.5.8`), runs upstream's `veilid-wasm/wasm_build_js.sh release --features=enable-protocol-wss` (cargo build, wasm-bindgen, wasm-opt, at the tool versions the tag pins), and replaces `projects/weft/wasm/veilid/` with the bundle plus `BUILD_INFO.json`. No source patches and no edits to the generated glue are needed from 0.5.4 on.
 
-**Future: CI-compiled WASM.** Could add a GitHub Actions job, but the `enable-protocol-wss` flag + Worker patches make it non-trivial. The nspawn container on ares is the current build environment.
+- **In CI:** the `Build Veilid WASM for weft` workflow (`.github/workflows/veilid-wasm-build.yml`) runs the script on demand and opens a draft PR on a `veilid-wasm/<tag>` branch. The PR is a draft because a new Veilid version can change the JS API; update `src/veilid-worker.js` on that branch before merging.
+- **Locally:** run the script with rustup + cargo installed (about 3 minutes on 4 cores).
+- **veilid-server** is not built by this workflow; the home node is still built by hand (see [wss-transport-blockers.md](wss-transport-blockers.md)).
 
 ### 9.4 CLAUDE.md updates — DONE
 

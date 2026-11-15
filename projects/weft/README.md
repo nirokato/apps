@@ -29,6 +29,8 @@ Messages are organized into **rooms** containing **topics** (threads). Each topi
 - Per-room presence subkey allocation
 - CRDT merge: independent databases converge via `crsql_changes`
 
+**Veilid 0.5.8 upgrade:** the WASM client is now 0.5.8 (was 0.5.3). Startup, crypto and local DHT operations are verified in a Web Worker; network attachment against the 0.5.3 home node has not been re-verified yet, and the results below were recorded on 0.5.3 (whose top attachment state, `OverAttached`, is `AttachedFull` in 0.5.8).
+
 **WSS transport: PARTIALLY RESOLVED** — see [docs/wss-transport-blockers.md](docs/wss-transport-blockers.md) for the full journey.
 
 Andy's veilid-server rebuilt from source with `enable-protocol-wss`, serving WSS on port 5150 with a Let's Encrypt cert. Bootstrap via WSS works from HTTPS pages. On `http://localhost`, reaches OverAttached with the node as relay. On HTTPS, bootstrap succeeds but the one-shot connection closes — the WASM client can't establish a persistent peer connection because all discovered peers only advertise `ws://` (blocked by mixed content).
@@ -60,8 +62,11 @@ lib/                       Vendored cr-sqlite dependencies
   xplat-api/               @vlcn.io/xplat-api v0.15.0
   async-mutex/             async-mutex v0.4.1
 wasm/veilid/
-  veilid_wasm.js           Veilid WASM loader (~310 KB, patched for Worker compat)
-  veilid_wasm_bg.wasm      Compiled Veilid binary (~9.5 MB, built with enable-protocol-wss)
+  veilid_wasm.js           Veilid WASM loader (~440 KB, unmodified wasm-bindgen output)
+  veilid_wasm_bg.wasm      Compiled Veilid binary (~6.4 MB, built with enable-protocol-wss)
+  veilid_wasm.d.ts         Type declarations (API reference for veilid-worker.js)
+  veilid_errors.js         Error classes the loader imports (plus snippets/)
+  BUILD_INFO.json          Veilid tag, commit, features, tool versions, hashes
 test-headless.mjs          Headless Chromium test script (console capture via --enable-logging)
 tests/
   run.js                   Playwright test runner (auto-discovers *.test.html)
@@ -115,6 +120,6 @@ Open `test.html` in a browser or run `node run-tests.js`. Validates Veilid WASM 
 - **No bundler, no npm** — native ES modules, CDN imports
 - **lit-html** for UI rendering
 - **cr-sqlite** (`@vlcn.io/crsqlite-wasm`) for CRDT-enabled local persistence
-- **Veilid WASM** v0.5.3 for P2P networking, DHT, and cryptography (built with `enable-protocol-wss`, Worker-patched)
+- **Veilid WASM** v0.5.8 for P2P networking, DHT, and cryptography (built with `enable-protocol-wss` by `tools/veilid-wasm-build/build.sh`; see the `Build Veilid WASM for weft` workflow)
 - **ULID** for lexicographically sortable message IDs
 - **Playwright** for automated browser-based testing
