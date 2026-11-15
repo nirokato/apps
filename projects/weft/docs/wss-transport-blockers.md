@@ -301,7 +301,7 @@ Open risk: the node must publish its WSS dial info as direct. If it publishes it
 
 1. **Node:** serves a signed v1 bootstrap record for itself (signing key `VLD0:KG-HVX3OKB6-wMW6pxhc4I44NYXsRWfZPEevC7czSE8`, also in the node's `bootstrap_keys`), so its B01T answer carries its own signed peer info. `tcp` and `ws` are configured statically so they publish as direct. The record must be regenerated if the public IP changes.
 2. **Client config (`src/veilid-worker.js`):** the signing key is appended to the default `bootstrapKeys`, and `ws` outbound is disabled on HTTPS pages. Veilid prefers a peer's `ws` dial info over `wss` when both are direct, and the browser refuses `ws://`.
-3. **Client patch (`tools/veilid-wasm-build/patches/0001-…`):** Veilid 0.5.8 rewrites a peer's `wss` URL to its IP in the browser, which fails TLS against a hostname certificate (seen as `CloseEvent 1006`; confirmed by packet capture on the node). The patch keeps the hostname.
+3. **Local workaround (`tools/veilid-wasm-build/patches/0001-…`):** in the browser, Veilid 0.5.8 dials a peer's `wss` dial info by its IP, which pins the address but fails TLS against a hostname certificate (seen as `CloseEvent 1006`; confirmed by packet capture on the node). The workaround dials the hostname instead.
 
 **Still open:** the client stays at `AttachedWeak` with `public internet ready: false` (`outbound=NeedsPublishedPeerInfo inbound=NeedsDialInfoConfirmation`) in the 30 seconds observed, and no private route has been created yet, so messaging between two browsers is untested. Longer observation needs a real browser; the Cloudflare probe is limited to about a minute.
 
@@ -330,3 +330,7 @@ It then stays at `stage: outbound=NeedsMoreTestedNodes inbound=ReadyToPublish`. 
 **So:** with a single WSS node, Veilid 0.5.8 cannot bring an HTTPS browser client to `ReadyToOperate`. It needs either roughly 9 to 12 WSS-capable nodes, an outbound-relay implementation in Veilid, or a transport every node can offer to browsers (WebTransport, planned for Veilid 0.6.0).
 
 **Unexplored:** the server's non-allowlist relay branch (`network_manager/mod.rs`, around lines 1440 to 1460) forwards a client's envelope to any node in the server's routing table. A client patch that sent traffic to other nodes through its inbound relay might work without server changes. The reply path has not been traced, and it is a larger change than the two patches above.
+
+**How to read the two source patches.** They are local workarounds at the edge of Veilid's security requirements, not defects in Veilid: dialing by IP pins the address in the signed peer info, and requiring relays for every address type keeps a node reachable by all peers. Weft relaxed both only to see how far a browser with one WSS node could get. Nothing has been or will be filed upstream about them.
+
+**Status: parked (2026-11-15).** The home node is stopped: VM off with autostart disabled, and the router's port forward for 5150 removed. `wss://veilid.andymolenda.com:5150/ws` is unreachable, so the preview and production both sit at "Attaching", and probing them is pointless until the node is brought back. Conclusion: Veilid is not ready for WSS-only browser clients yet. This waits for browser transport support in Veilid itself. The branch `claude/init-weft-chat-HISsP` holds this work, unmerged.

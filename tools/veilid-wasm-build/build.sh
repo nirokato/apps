@@ -47,7 +47,7 @@ fi
 VEILID_COMMIT="$(git -C "$SRC" rev-parse HEAD)"
 
 # --- patches -----------------------------------------------------------------
-# Fixes weft needs that upstream doesn't have yet; see patches/README.md. Each must apply
+# Local workarounds for weft; see patches/README.md for what each one relaxes. Each must apply
 # cleanly, or already be applied (a reused VEILID_SRC), or the build stops.
 PATCH_DIR="$REPO_ROOT/tools/veilid-wasm-build/patches"
 PATCHES=()
