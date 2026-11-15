@@ -3,10 +3,10 @@
   "veilid_ref": "v0.5.8",
   "veilid_commit": "759da70be95497cfaa2e0bb8c122b16c8cac449e",
   "features": "enable-protocol-wss",
-  "patches": ["0001-wasm-wss-dial-by-hostname.patch"],
+  "patches": ["0001-wasm-wss-dial-by-hostname.patch","0002-relay-requirements-configured-address-types.patch"],
   "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
   "wasm_bindgen": "0.2.121",
   "binaryen": "125",
-  "veilid_wasm_bg.wasm": { "bytes": 6367511, "sha256": "beb6e07be27d82a6294ce8a5cebae8c2bcfb6ad575d9f88eb74e7870eb6b5ccf" },
+  "veilid_wasm_bg.wasm": { "bytes": 6367511, "sha256": "79e36e68df422c3fa1a1e3f5a531b762b0c1b845019d1a372d506bfd6eb46be0" },
   "veilid_wasm.js": { "bytes": 443061, "sha256": "d4e43a4b32e228ed8eee8f125f15aec56d7611fda07ef42a7b200cc5596f0a27" }
 }

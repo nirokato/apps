@@ -1,0 +1,19 @@
+diff --git a/veilid-core/src/routing_table/routing_domains/relay_requirements.rs b/veilid-core/src/routing_table/routing_domains/relay_requirements.rs
+index 3c9272f..12c1a3b 100644
+--- a/veilid-core/src/routing_table/routing_domains/relay_requirements.rs
++++ b/veilid-core/src/routing_table/routing_domains/relay_requirements.rs
+@@ -52,10 +52,12 @@ impl RelayRequirements {
+         let mut dial_info_list = rdd.dial_info_details().clone();
+         dial_info_list.sort_unstable_by(DialInfoDetail::ordered_sequencing_sort);
+ 
+-        // Start with all possible combinations we might need to have relays for
++        // Start with all possible combinations we might need to have relays for.
++        // Only the address types this node is configured for: a node limited to IPv4 can
++        // never be given an IPv6 relay it is able to dial, so requiring one blocks publishing.
+         let mut need_relay_transports = HashSet::<TransportType>::new();
+         let mut need_relay_orderings = HashSet::<(SequenceOrdering, AddressType)>::new();
+-        for at in AddressTypeSet::all() {
++        for at in address_types {
+             for pt in ProtocolTypeSet::all() {
+                 need_relay_transports.insert(TransportType::new(pt, at));
+                 need_relay_orderings.insert((pt.sequence_ordering(), at));

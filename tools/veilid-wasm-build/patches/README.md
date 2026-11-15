@@ -22,3 +22,20 @@ bootstrap connection from the same browser completed.
 is unchanged.
 
 **Upstream:** not reported yet.
+
+## 0002-relay-requirements-configured-address-types.patch
+
+**Problem (Veilid 0.5.8):** `RelayRequirements::new`
+(`veilid-core/src/routing_table/routing_domains/relay_requirements.rs`) seeds the relay
+orderings a node needs from every address type, not the ones it is configured for. A
+browser client has no dial info of its own, so even with `network.addressTypes = ["IPV4"]`
+it needs relays covering IPv6. The only relay it can dial over WSS is the IPv4-only home
+node, so the requirement is never met, the client stays at `inbound=NeedsRelays`, and it
+never publishes peer info or allocates a private route.
+
+**Fix:** seed from the routing domain's configured address types.
+
+**Trade-off:** IPv6-only peers cannot reach the browser through its relay. Giving the home
+node public IPv6 would remove the need for this patch.
+
+**Upstream:** not reported yet.
