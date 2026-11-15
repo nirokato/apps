@@ -1,0 +1,25 @@
+diff --git a/veilid-core/src/network_manager/network/wasm/protocol/ws.rs b/veilid-core/src/network_manager/network/wasm/protocol/ws.rs
+index 90878b8..44c3f3a 100644
+--- a/veilid-core/src/network_manager/network/wasm/protocol/ws.rs
++++ b/veilid-core/src/network_manager/network/wasm/protocol/ws.rs
+@@ -127,7 +127,7 @@ impl WebsocketProtocolHandler {
+         timeout_ms: u32,
+     ) -> io::Result<NetworkResult<ProtocolNetworkConnection>> {
+         // Split dial info up
+-        let (_tls, scheme) = match dial_info {
++        let (tls, scheme) = match dial_info {
+             DialInfo::WS(_) => (false, "ws"),
+             #[cfg(feature = "enable-protocol-wss")]
+             DialInfo::WSS(_) => (true, "wss"),
+@@ -139,8 +139,10 @@ impl WebsocketProtocolHandler {
+             bail_io_error_other!("invalid websocket url scheme");
+         }
+ 
++        // A browser validates the TLS certificate against the URL's host, so a wss dial must
++        // keep the hostname from the dial info's request; an IP-based URL fails the handshake.
+         let socket_address = dial_info.socket_address();
+-        let connect_request = if socket_address.ip_addr().is_unspecified() {
++        let connect_request = if tls || socket_address.ip_addr().is_unspecified() {
+             request
+         } else {
+             let ip_based_url = SplitUrl::new(

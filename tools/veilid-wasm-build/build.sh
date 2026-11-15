@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Build veilid-wasm from an upstream Veilid tag and vendor it into weft.
 #
-# Runs upstream's own pipeline (veilid-wasm/wasm_build_js.sh: cargo build,
-# wasm-bindgen, wasm-opt) with weft's feature set, then replaces
+# Applies tools/veilid-wasm-build/patches/*.patch, runs upstream's own pipeline
+# (veilid-wasm/wasm_build_js.sh: cargo build, wasm-bindgen, wasm-opt) with weft's
+# feature set, then replaces
 # projects/weft/wasm/veilid/ with the result plus a BUILD_INFO.json.
 #
 # Usage: tools/veilid-wasm-build/build.sh
@@ -44,6 +45,24 @@ fi
 [ -x "$SRC/veilid-wasm/wasm_build_js.sh" ] \
     || die "$VEILID_REF has no veilid-wasm/wasm_build_js.sh (tags before 0.5.4 built with wasm-pack)"
 VEILID_COMMIT="$(git -C "$SRC" rev-parse HEAD)"
+
+# --- patches -----------------------------------------------------------------
+# Fixes weft needs that upstream doesn't have yet; see patches/README.md. Each must apply
+# cleanly, or already be applied (a reused VEILID_SRC), or the build stops.
+PATCH_DIR="$REPO_ROOT/tools/veilid-wasm-build/patches"
+PATCHES=()
+for patch in "$PATCH_DIR"/*.patch; do
+    [ -e "$patch" ] || continue
+    if git -C "$SRC" apply --check "$patch" 2>/dev/null; then
+        git -C "$SRC" apply "$patch"
+    elif ! git -C "$SRC" apply --reverse --check "$patch" 2>/dev/null; then
+        die "$(basename "$patch") does not apply to $VEILID_REF; update or drop it"
+    fi
+    PATCHES+=("$(basename "$patch")")
+done
+PATCHES_JSON="$(printf '"%s",' "${PATCHES[@]}")"
+PATCHES_JSON="[${PATCHES_JSON%,}]"
+[ "${#PATCHES[@]}" -eq 0 ] && PATCHES_JSON="[]"
 VEILID_VERSION="$(awk -F'"' '/^version = "/ {print $2; exit}' "$SRC/veilid-wasm/Cargo.toml")"
 
 # --- tool versions, as pinned by the checkout --------------------------------
@@ -96,6 +115,7 @@ cat > "$OUT_DIR/BUILD_INFO.json" <<EOF
   "veilid_ref": "$VEILID_REF",
   "veilid_commit": "$VEILID_COMMIT",
   "features": "$VEILID_FEATURES",
+  "patches": $PATCHES_JSON,
   "rustc": "$(rustc --version)",
   "wasm_bindgen": "$WASM_BINDGEN_VERSION",
   "binaryen": "$BINARYEN_VERSION",
