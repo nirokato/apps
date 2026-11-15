@@ -15,6 +15,7 @@
 #   VEILID_SRC       existing Veilid checkout to build instead of cloning
 #   WORK_DIR         where the clone goes            (default: a temp dir)
 #   OUT_DIR          where the binary is written     (default: $WORK_DIR/out)
+#   C_MARCH          -march for the C code            (default: x86-64-v2, the node's vCPU)
 #
 # Needs: git, rustup + cargo, musl-gcc (Debian/Ubuntu: musl-tools).
 
@@ -48,11 +49,22 @@ VEILID_COMMIT="$(git -C "$SRC" rev-parse HEAD)"
 # --- build -------------------------------------------------------------------
 rustup target add "$TARGET"
 export CC_x86_64_unknown_linux_musl=musl-gcc
+# Pin the C code (bundled SQLite, ring) to x86-64-v2. Newer Ubuntu GCC emits
+# AVX by default, and the node's vCPU (Proxmox x86-64-v2-AES) has no AVX: the
+# 2026-11-15 build died with SIGILL in sqlite3_initialize.
+C_MARCH="${C_MARCH:-x86-64-v2}"
+export CFLAGS_x86_64_unknown_linux_musl="-march=$C_MARCH -mtune=generic"
 (cd "$SRC" && cargo build --locked --release --target "$TARGET" -p veilid-server --features "$VEILID_FEATURES")
 BIN="$SRC/target/$TARGET/release/veilid-server"
 
 # --- check -------------------------------------------------------------------
 file "$BIN" | grep -qE 'statically linked|static-pie linked' || die "not a static binary: $(file -b "$BIN")"
+# SQLite has no runtime CPU dispatch, so any VEX (AVX) instruction in its
+# functions means the C code was built above x86-64-v2.
+AVX_COUNT="$(objdump -d --no-show-raw-insn "$BIN" \
+    | awk '/^[0-9a-f]+ <sqlite3[^>]*>:$/{s=1;next} /^$/{s=0} s' \
+    | grep -cE '\sv[a-z0-9]+\s+.*%[xyz]mm' || true)"
+[ "$AVX_COUNT" = "0" ] || die "SQLite code has $AVX_COUNT AVX instructions; the node's CPU (x86-64-v2) can't run it"
 VEILID_VERSION="$("$BIN" --version | awk '{print $2}')"
 "$BIN" --dump-config > "$WORK_DIR/dump-config.yaml"
 if [[ ",$VEILID_FEATURES," == *",enable-protocol-wss,"* ]]; then
@@ -70,6 +82,8 @@ cat > "$OUT_DIR/BUILD_INFO.json" <<EOF
   "veilid_commit": "$VEILID_COMMIT",
   "features": "$VEILID_FEATURES",
   "target": "$TARGET",
+  "c_march": "$C_MARCH",
+  "cc": "$(musl-gcc --version | head -1)",
   "rustc": "$(rustc --version)",
   "veilid-server": { "bytes": $(stat -c %s "$OUT_DIR/veilid-server"), "sha256": "$(sha "$OUT_DIR/veilid-server")" }
 }
