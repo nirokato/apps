@@ -28,6 +28,7 @@ tools/
   claude.yml             Claude Code GitHub Action (issue/PR triggers)
   trove-refresh.yml      Rebuild trove's Printables index (scheduled + manual)
   veilid-wasm-build.yml  Rebuild weft's Veilid WASM from an upstream tag (manual; opens a draft PR)
+  preview.yml            Deploy one project from a branch to the preview Pages project
   github-uptime-refresh.yml  Rebuild + deploy github-uptime's data (monthly + manual)
 ```
 
@@ -133,6 +134,7 @@ For a *just for fun* project, tag the name: `<div class="project-name"><name><sp
 - **Infrastructure:** OpenTofu manages Pages projects, custom domains, and DNS CNAMEs. State in Cloudflare R2 (`tofu-state` bucket, key `apps/`).
 - **Workflow:** `.github/workflows/deploy.yml` — tofu plan on PR (with comment), tofu apply + deploy on push to `main`.
 - **Auto-discovery:** The deploy job scans `projects/` at runtime to build its matrix. No manual matrix updates needed.
+- **Previews:** `.github/workflows/preview.yml` deploys one project from a branch to the shared `andy-apps-preview` Pages project, at `https://<project>.andy-apps-preview.pages.dev`. It runs on pushes to `claude/**` branches that touch `projects/weft/` (weft's networking needs an HTTPS origin to test) and by hand for any project. It never touches the production projects.
 - **Trove index refresh:** `.github/workflows/trove-refresh.yml` rebuilds `projects/trove/data/index.json` from the Printables API (weekly + manual dispatch) and commits to `main`, re-triggering trove's deploy. The deployed app is fully static; the ingest never runs in users' browsers.
 - **github-uptime refresh:** `.github/workflows/github-uptime-refresh.yml` re-scrapes on the 2nd of each month (~9 min, paced requests), commits only when the data changed, and deploys github-uptime itself with wrangler. Pushes made with `GITHUB_TOKEN` don't start other workflows, so `deploy.yml` never sees a bot commit; any scheduled refresh that should go live has to deploy on its own.
 - **Domains:** Homepage at `apps.andymolenda.com`, projects at `<name>.apps.andymolenda.com`.

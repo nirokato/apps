@@ -1,0 +1,54 @@
+name: Preview deploy
+
+# Deploys one project from a branch to the andy-apps-preview Pages project, at
+# https://<project>.andy-apps-preview.pages.dev, so a change can be tried over
+# HTTPS before it reaches main. Production deploys stay in deploy.yml.
+#
+# Pushes to claude/** branches that touch weft deploy it automatically: weft's
+# Veilid networking can only be exercised from an HTTPS origin. Any project can
+# be deployed by hand with workflow_dispatch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        description: "Directory under projects/ to deploy"
+        required: true
+        default: weft
+  push:
+    branches:
+      - "claude/**"
+    paths:
+      - "projects/weft/**"
+      - ".github/workflows/preview.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-${{ inputs.project || 'weft' }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT: ${{ inputs.project || 'weft' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check project
+        run: |
+          [[ "$PROJECT" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "::error::bad project name: $PROJECT"; exit 1; }
+          [ -f "projects/$PROJECT/index.html" ] || { echo "::error::projects/$PROJECT/index.html not found"; exit 1; }
+
+      - name: Deploy to Cloudflare Pages (preview)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy projects/${{ env.PROJECT }} --project-name=andy-apps-preview --branch=${{ env.PROJECT }}
+
+      - name: Summarize
+        run: echo "Deployed \`projects/$PROJECT\` at \`${GITHUB_SHA::7}\` to https://$PROJECT.andy-apps-preview.pages.dev" >> "$GITHUB_STEP_SUMMARY"
