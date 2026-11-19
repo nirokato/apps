@@ -95,6 +95,10 @@
     .load-top { display: flex; justify-content: space-between; gap: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #9a9686; margin-bottom: 0.25rem; }
     .bar { height: 4px; background: #2a2a24; border-radius: 2px; overflow: hidden; }
     .bar i { display: block; height: 100%; width: 0; background: #c4a24e; transition: width 0.15s linear; }
+    .cam video { display: block; width: 100%; max-height: 70vh; background: #0f0f0c; border: 1px solid #2a2a24; border-radius: 6px; object-fit: contain; }
+    .cam video.mirror { transform: scaleX(-1); }
+    .cam-open #drop, .cam-open #mainActions .btn { display: none; }
+    .cam-open #mainActions { margin-top: 0.5rem; }
     .first-note { margin-top: 0.75rem; font-size: 0.75rem; color: #9a9686; }
 
     /* Viewer */
@@ -153,12 +157,20 @@
     <section class="card">
       <div class="drop" id="drop" role="button" tabindex="0" aria-describedby="dropHint">
         <input type="file" id="file" accept="image/*" hidden>
-        <!-- `capture` opens the camera directly on iOS and Android; desktops ignore it. -->
+        <!-- Fallback only, for browsers without getUserMedia. `capture` is a hint that many Android setups ignore. -->
         <input type="file" id="camera" accept="image/*" capture="environment" hidden>
         <div class="big" id="dropTitle">Drop an image here, or click to browse</div>
         <div class="small" id="dropHint">You can also paste one from the clipboard.</div>
       </div>
-      <div class="actions">
+      <div class="cam" id="cam" hidden>
+        <video id="camVideo" playsinline muted autoplay aria-label="Live camera preview"></video>
+        <div class="actions">
+          <button class="btn primary" id="camSnap" disabled>Capture</button>
+          <button class="btn" id="camFlip" hidden>Switch camera</button>
+          <button class="btn" id="camCancel">Cancel</button>
+        </div>
+      </div>
+      <div class="actions" id="mainActions">
         <button class="btn primary" id="go" disabled>Describe image</button>
         <button class="btn" id="shoot" hidden>Take photo</button>
         <button class="btn" id="clear" disabled>Clear</button>
@@ -400,7 +412,7 @@
       for (const id of ['toolbar', 'runMeta', 'results', 'rawCard']) $(id).hidden = true;
       drop.classList.add('has-image');
       $('dropTitle').textContent = image.name;
-      $('dropHint').textContent = `${w} × ${h} px · ${file.size >= 1e6 ? mb(file.size) : `${Math.max(1, Math.round(file.size / 1000))} KB`} · ${shootBtn.hidden ? 'drop, paste or click' : 'tap'} to change`;
+      $('dropHint').textContent = `${w} × ${h} px · ${file.size >= 1e6 ? mb(file.size) : `${Math.max(1, Math.round(file.size / 1000))} KB`} · ${coarse ? 'tap' : 'drop, paste or click'} to change`;
       draw();
       syncButtons();
       // Once the model is in memory a new image costs nothing to start; before that, wait for the click.
@@ -412,16 +424,110 @@
     drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
     fileInput.addEventListener('change', () => { selectFile(fileInput.files[0]); fileInput.value = ''; });
 
-    // Phones and tablets get a button that goes straight to the camera. Elsewhere
-    // the same input would only open a second file picker, so it stays hidden.
+    // ---------------------------------------------------------------- camera
+    // A live viewfinder through getUserMedia. The simpler route, a file input
+    // with `capture`, is only a hint: Chrome on Android drops to the gallery when
+    // the browser itself lacks the camera permission, and WebViews and several
+    // other browsers ignore it outright. The capture input stays as the fallback
+    // where getUserMedia does not exist.
     const cameraInput = $('camera'), shootBtn = $('shoot');
-    const idleHint = matchMedia('(pointer: coarse)').matches ? 'Or take a photo with the button below.' : 'You can also paste one from the clipboard.';
-    const idleTitle = matchMedia('(pointer: coarse)').matches ? 'Tap to choose an image' : 'Drop an image here, or click to browse';
-    shootBtn.hidden = !matchMedia('(pointer: coarse)').matches;
+    const camPanel = $('cam'), camVideo = $('camVideo'), camSnap = $('camSnap'), camFlip = $('camFlip');
+    const card = camPanel.closest('.card');
+    const coarse = matchMedia('(pointer: coarse)').matches;
+    const hasCamApi = !!navigator.mediaDevices?.getUserMedia;
+    const idleHint = coarse ? 'Or take a photo with the button below.' : 'You can also paste one from the clipboard.';
+    const idleTitle = coarse ? 'Tap to choose an image' : 'Drop an image here, or click to browse';
+    shootBtn.hidden = !(hasCamApi || coarse);
     $('dropHint').textContent = idleHint;
     $('dropTitle').textContent = idleTitle;
-    shootBtn.addEventListener('click', () => cameraInput.click());
     cameraInput.addEventListener('change', () => { selectFile(cameraInput.files[0]); cameraInput.value = ''; });
+
+    let camStream = null;
+    let camFacing = 'environment';
+    let camOpening = 0;
+
+    function stopCamera() {
+      camOpening++; // cancels an open still waiting on the permission prompt
+      for (const track of camStream?.getTracks() || []) track.stop();
+      camStream = null;
+      camVideo.srcObject = null;
+      camSnap.disabled = true;
+      camPanel.hidden = true;
+      card.classList.remove('cam-open');
+    }
+
+    function cameraError(err) {
+      const why = {
+        NotAllowedError: 'Camera access was blocked. Allow the camera for this site in your browser settings, or choose a photo instead.',
+        SecurityError: 'Camera access was blocked. Allow the camera for this site in your browser settings, or choose a photo instead.',
+        NotFoundError: 'No camera was found on this device.',
+        OverconstrainedError: 'No camera was found on this device.',
+        NotReadableError: 'The camera is in use by another app.',
+        AbortError: 'The camera could not be started.',
+      }[err?.name] || `The camera could not be started (${err?.message || err?.name || 'unknown error'}).`;
+      setStatus(why, 'err');
+    }
+
+    async function startCamera() {
+      const attempt = ++camOpening;
+      for (const track of camStream?.getTracks() || []) track.stop();
+      camStream = null;
+      camSnap.disabled = true;
+      card.classList.add('cam-open');
+      camPanel.hidden = false;
+      setStatus('Starting the camera…', '', true);
+      let stream;
+      try {
+        // `ideal`, not `exact`: laptops and some phones report no facing mode at all.
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { facingMode: { ideal: camFacing }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        });
+      } catch (err) {
+        if (attempt !== camOpening) return;
+        stopCamera();
+        cameraError(err);
+        return;
+      }
+      if (attempt !== camOpening) { for (const track of stream.getTracks()) track.stop(); return; }
+      camStream = stream;
+      const settings = stream.getVideoTracks()[0]?.getSettings?.() || {};
+      // Mirror a selfie preview so it moves the way a mirror does; the saved frame is not flipped.
+      camVideo.classList.toggle('mirror', settings.facingMode === 'user');
+      camVideo.srcObject = stream;
+      try { await camVideo.play(); } catch { /* autoplay attribute covers it */ }
+      if (attempt !== camOpening) return;
+      camSnap.disabled = false;
+      setStatus('');
+      try {
+        const cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+        camFlip.hidden = cams.length < 2;
+      } catch { camFlip.hidden = true; }
+    }
+
+    shootBtn.addEventListener('click', () => {
+      if (hasCamApi) startCamera();
+      else cameraInput.click();
+    });
+    camFlip.addEventListener('click', () => {
+      camFacing = camFacing === 'environment' ? 'user' : 'environment';
+      startCamera();
+    });
+    $('camCancel').addEventListener('click', () => { stopCamera(); setStatus(''); });
+    camSnap.addEventListener('click', () => {
+      const w = camVideo.videoWidth, h = camVideo.videoHeight;
+      if (!w || !h) return;
+      const shot = Object.assign(document.createElement('canvas'), { width: w, height: h });
+      shot.getContext('2d').drawImage(camVideo, 0, 0, w, h);
+      stopCamera();
+      shot.toBlob((blob) => {
+        if (!blob) { setStatus('The photo could not be saved. Try again.', 'err'); return; }
+        selectFile(new File([blob], 'camera photo.jpg', { type: 'image/jpeg' }));
+      }, 'image/jpeg', 0.92);
+    });
+    // Never leave the camera running behind a hidden tab.
+    document.addEventListener('visibilitychange', () => { if (document.hidden && !camPanel.hidden) { stopCamera(); setStatus(''); } });
+    window.addEventListener('pagehide', stopCamera);
     for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('drag'); });
     for (const ev of ['dragleave', 'drop']) drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('drag'); });
     drop.addEventListener('drop', (e) => selectFile(e.dataTransfer?.files?.[0]));
