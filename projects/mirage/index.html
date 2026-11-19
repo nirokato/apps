@@ -108,6 +108,13 @@
     .shutter:disabled { opacity: 0.4; cursor: default; }
     .cam-open #drop, .cam-open #mainActions .btn { display: none; }
     .cam-open #mainActions { margin-top: 0.5rem; }
+    .samples { margin-top: 1rem; }
+    .samples p { font-size: 0.75rem; color: #9a9686; margin-bottom: 0.4rem; }
+    .samples div { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; }
+    .samples button { padding: 0; border: 1px solid #2a2a24; border-radius: 6px; overflow: hidden; background: #0f0f0c; aspect-ratio: 4 / 3; }
+    .samples button:hover, .samples button:focus-visible { border-color: #c4a24e; }
+    .samples img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .cam-open .samples { display: none; }
     .first-note { margin-top: 0.75rem; font-size: 0.75rem; color: #9a9686; }
 
     /* Viewer. Once there is a result it sticks to the top of the viewport, so
@@ -232,6 +239,15 @@
           <div class="bar"><i id="modelBar"></i></div>
         </div>
       </div>
+      <div class="samples" id="samples">
+        <p>No photo to hand? Try one of these.</p>
+        <div>
+          <button data-sample="desk" aria-label="Sample: a laptop and coffee on a desk"><img src="./samples/desk-thumb.jpg" alt="" width="320" height="240" loading="lazy"></button>
+          <button data-sample="breakfast" aria-label="Sample: a breakfast table"><img src="./samples/breakfast-thumb.jpg" alt="" width="320" height="240" loading="lazy"></button>
+          <button data-sample="signs" aria-label="Sample: road signs at a junction"><img src="./samples/signs-thumb.jpg" alt="" width="320" height="240" loading="lazy"></button>
+          <button data-sample="cat" aria-label="Sample: a black cat on a sofa"><img src="./samples/cat-thumb.jpg" alt="" width="320" height="240" loading="lazy"></button>
+        </div>
+      </div>
       <p class="first-note" id="firstNote">The first run downloads the model (about 23&nbsp;MB) and keeps it in this browser for next time.</p>
     </section>
 
@@ -295,7 +311,7 @@
       <h2>How it works</h2>
       <p><a href="https://huggingface.co/Cactus-Compute/mirage">Mirage</a> is a small vision model from Cactus Compute. One pass over an image returns a scene summary, named objects with boxes and outlines, the text it can read, and how the objects relate. Scores run from 0 to 1.</p>
       <p>The engine is Cactus's WebAssembly runtime (1.3&nbsp;MB, served from this site). The weights (21.6&nbsp;MB) come from Hugging Face on the first run, are checked against a known SHA-256, and are then kept in this browser. Your image is decoded, scaled to 1024&nbsp;px on its long edge and handed to the model in a background worker; no part of it is sent anywhere.</p>
-      <p class="muted">Engine and weights are Apache-2.0, &copy; Cactus Compute. This page is our own take on <a href="https://github.com/joemaddalone/mirage-demo">Joe Maddalone's mirage-demo</a>.</p>
+      <p class="muted">Engine and weights are Apache-2.0, &copy; Cactus Compute. This page is our own take on <a href="https://github.com/joemaddalone/mirage-demo">Joe Maddalone's mirage-demo</a>. The sample photos are public domain (CC0) from Wikimedia Commons; <a href="https://github.com/nirokato/apps/blob/main/projects/mirage/samples/CREDITS.md">credits</a>.</p>
     </section>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -400,6 +416,7 @@
     function syncButtons() {
       goBtn.hidden = !image || !!result || !!busy;
       clearBtn.hidden = !image;
+      $('samples').hidden = !!image;
       shootBtn.classList.toggle('primary', !image);
     }
 
@@ -505,6 +522,18 @@
     const coarse = matchMedia('(pointer: coarse)').matches;
     const hasCamApi = !!navigator.mediaDevices?.getUserMedia;
     const idleHint = coarse ? 'Or take a photo with the button below.' : 'You can also paste one from the clipboard.';
+    // Samples run straight away: picking one is asking to see it described.
+    $('samples').addEventListener('click', async (e) => {
+      const name = e.target.closest('[data-sample]')?.dataset.sample;
+      if (!name) return;
+      try {
+        const res = await fetch(`./samples/${name}.jpg`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        selectFile(new File([await res.blob()], `${name}.jpg`, { type: 'image/jpeg' }), { auto: true });
+      } catch {
+        setStatus('That sample could not be loaded. Try again.', 'err');
+      }
+    });
     const idleTitle = coarse ? 'Tap to choose an image' : 'Drop an image here, or click to browse';
     shootBtn.hidden = !(hasCamApi || coarse);
     syncButtons();
