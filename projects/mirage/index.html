@@ -153,11 +153,14 @@
     <section class="card">
       <div class="drop" id="drop" role="button" tabindex="0" aria-describedby="dropHint">
         <input type="file" id="file" accept="image/*" hidden>
+        <!-- `capture` opens the camera directly on iOS and Android; desktops ignore it. -->
+        <input type="file" id="camera" accept="image/*" capture="environment" hidden>
         <div class="big" id="dropTitle">Drop an image here, or click to browse</div>
         <div class="small" id="dropHint">You can also paste one from the clipboard.</div>
       </div>
       <div class="actions">
         <button class="btn primary" id="go" disabled>Describe image</button>
+        <button class="btn" id="shoot" hidden>Take photo</button>
         <button class="btn" id="clear" disabled>Clear</button>
         <span class="status" id="status" role="status"></span>
       </div>
@@ -397,7 +400,7 @@
       for (const id of ['toolbar', 'runMeta', 'results', 'rawCard']) $(id).hidden = true;
       drop.classList.add('has-image');
       $('dropTitle').textContent = image.name;
-      $('dropHint').textContent = `${w} × ${h} px · ${file.size >= 1e6 ? mb(file.size) : `${Math.max(1, Math.round(file.size / 1000))} KB`} · drop, paste or click to change`;
+      $('dropHint').textContent = `${w} × ${h} px · ${file.size >= 1e6 ? mb(file.size) : `${Math.max(1, Math.round(file.size / 1000))} KB`} · ${shootBtn.hidden ? 'drop, paste or click' : 'tap'} to change`;
       draw();
       syncButtons();
       // Once the model is in memory a new image costs nothing to start; before that, wait for the click.
@@ -408,6 +411,17 @@
     drop.addEventListener('click', () => fileInput.click());
     drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
     fileInput.addEventListener('change', () => { selectFile(fileInput.files[0]); fileInput.value = ''; });
+
+    // Phones and tablets get a button that goes straight to the camera. Elsewhere
+    // the same input would only open a second file picker, so it stays hidden.
+    const cameraInput = $('camera'), shootBtn = $('shoot');
+    const idleHint = matchMedia('(pointer: coarse)').matches ? 'Or take a photo with the button below.' : 'You can also paste one from the clipboard.';
+    const idleTitle = matchMedia('(pointer: coarse)').matches ? 'Tap to choose an image' : 'Drop an image here, or click to browse';
+    shootBtn.hidden = !matchMedia('(pointer: coarse)').matches;
+    $('dropHint').textContent = idleHint;
+    $('dropTitle').textContent = idleTitle;
+    shootBtn.addEventListener('click', () => cameraInput.click());
+    cameraInput.addEventListener('change', () => { selectFile(cameraInput.files[0]); cameraInput.value = ''; });
     for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('drag'); });
     for (const ev of ['dragleave', 'drop']) drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('drag'); });
     drop.addEventListener('drop', (e) => selectFile(e.dataTransfer?.files?.[0]));
@@ -423,8 +437,8 @@
       image = null; result = null; hover = null; pinned = -1;
       for (const id of ['viewer', 'results', 'rawCard']) $(id).hidden = true;
       drop.classList.remove('has-image');
-      $('dropTitle').textContent = 'Drop an image here, or click to browse';
-      $('dropHint').textContent = 'You can also paste one from the clipboard.';
+      $('dropTitle').textContent = idleTitle;
+      $('dropHint').textContent = idleHint;
       if (!busy) setStatus('');
       syncButtons();
     });
