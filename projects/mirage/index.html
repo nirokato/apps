@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mirage — apps.andymolenda.com</title>
+  <meta name="description" content="Drop in a photo and see what a 21 MB vision model finds in it: objects, text and the scene. Runs in your browser; the image never leaves your device.">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { color-scheme: dark; }
+    [hidden] { display: none !important; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0f0f0c;
+      color: #e8e4d4;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      line-height: 1.5;
+    }
+    /* Wider than the usual 600px: the photo and its overlays need the room. */
+    .container { max-width: 900px; width: 100%; padding: 2rem; }
+    @media (max-width: 600px) { .container { padding: 1.5rem 1rem; } }
+    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+    .subtitle { color: #9a9686; font-size: 0.9rem; margin-bottom: 1.5rem; max-width: 42rem; }
+    a { color: #c4a24e; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .muted { color: #9a9686; }
+
+    .card {
+      background: #1a1a16;
+      border: 1px solid #2a2a24;
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+      font-size: 0.875rem;
+    }
+    @media (max-width: 600px) { .card { padding: 1rem; } }
+    .card h2, details.card > summary {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #c4a24e;
+    }
+    .card h2 { margin-bottom: 0.5rem; display: flex; align-items: baseline; gap: 0.5rem; }
+    .card h2 .count { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: 400; letter-spacing: 0; text-transform: none; color: #9a9686; }
+    .card p + p { margin-top: 0.6rem; }
+    details.card > summary { cursor: pointer; }
+
+    button { font: inherit; cursor: pointer; }
+    button:focus-visible, .drop:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid #c4a24e; outline-offset: 2px; }
+    .btn {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #9a9686;
+      background: none;
+      border: 1px solid #2a2a24;
+      border-radius: 6px;
+      padding: 0.4rem 0.9rem;
+    }
+    .btn:hover:not(:disabled) { color: #e8e4d4; }
+    .btn.primary { color: #0f0f0c; background: #c4a24e; border-color: #c4a24e; }
+    .btn.primary:hover:not(:disabled) { color: #0f0f0c; background: #d4b25e; border-color: #d4b25e; }
+    .btn:disabled { opacity: 0.45; cursor: default; }
+    .btn.sm { font-size: 0.7rem; padding: 0.2rem 0.6rem; }
+
+    /* Input */
+    .drop {
+      border: 1px dashed #2a2a24;
+      border-radius: 8px;
+      padding: 2rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .drop:hover, .drop.drag { border-color: #c4a24e; background: rgba(196, 162, 78, 0.05); }
+    .drop.has-image { padding: 0.9rem 1rem; }
+    .drop .big { font-weight: 600; overflow-wrap: anywhere; }
+    .drop .small { color: #9a9686; font-size: 0.8rem; margin-top: 0.15rem; }
+    .actions { display: flex; align-items: center; gap: 0.5rem 0.75rem; flex-wrap: wrap; margin-top: 1rem; }
+    .status { font-size: 0.8rem; color: #9a9686; min-width: 0; overflow-wrap: anywhere; }
+    .status.err { color: #e0705a; }
+    .status.ok { color: #e8e4d4; }
+    .spinner {
+      display: inline-block; width: 0.7em; height: 0.7em; margin-right: 0.45em;
+      border: 2px solid #2a2a24; border-top-color: #c4a24e; border-radius: 50%;
+      animation: spin 0.8s linear infinite; vertical-align: -0.05em;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+
+    .loader { margin-top: 1rem; display: grid; gap: 0.6rem; }
+    .load-top { display: flex; justify-content: space-between; gap: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #9a9686; margin-bottom: 0.25rem; }
+    .bar { height: 4px; background: #2a2a24; border-radius: 2px; overflow: hidden; }
+    .bar i { display: block; height: 100%; width: 0; background: #c4a24e; transition: width 0.15s linear; }
+    .first-note { margin-top: 0.75rem; font-size: 0.75rem; color: #9a9686; }
+
+    /* Viewer */
+    .stage { background: #0f0f0c; border: 1px solid #2a2a24; border-radius: 6px; overflow: hidden; display: flex; justify-content: center; }
+    .stage canvas { display: block; max-width: 100%; max-height: 75vh; width: auto; height: auto; touch-action: manipulation; }
+    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem 1.25rem; flex-wrap: wrap; margin-top: 0.75rem; font-size: 0.8rem; color: #9a9686; }
+    .toggles { display: flex; gap: 0.35rem 0.9rem; flex-wrap: wrap; }
+    .toggles label { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; }
+    .toggles label:hover { color: #e8e4d4; }
+    input[type="checkbox"], input[type="range"] { accent-color: #c4a24e; }
+    .conf { display: inline-flex; align-items: center; gap: 0.5rem; }
+    .conf input { width: 9rem; }
+    .conf output { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #e8e4d4; min-width: 2.2rem; }
+    .run-meta { margin-top: 0.6rem; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #9a9686; overflow-wrap: anywhere; }
+
+    /* Results */
+    .section + .section { margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid #2a2a24; }
+    .lead { font-size: 1rem; }
+    .lead::first-letter { text-transform: uppercase; }
+    .facts { list-style: none; margin-top: 0.5rem; color: #9a9686; font-size: 0.8rem; }
+    .facts li::before { content: '\2013\00a0'; }
+    .pills { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .pill { border: 1px solid #2a2a24; border-radius: 6px; padding: 0.2rem 0.55rem; font-size: 0.8rem; }
+    .pill .k { color: #9a9686; margin-right: 0.4rem; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .pill .p { color: #c4a24e; margin: 0 0.35rem; }
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem 1.5rem; }
+    @media (max-width: 700px) { .cols { grid-template-columns: 1fr; } }
+    .cols > div { min-width: 0; }
+    .items { list-style: none; max-height: 22rem; overflow-y: auto; margin: 0 -0.5rem; }
+    .item {
+      display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 0 0.6rem;
+      width: 100%; text-align: left; color: inherit; background: none; border: 0; border-radius: 6px; padding: 0.3rem 0.5rem;
+    }
+    .item:hover, .item.active { background: #24241f; }
+    .item.pinned { box-shadow: inset 2px 0 0 #c4a24e; }
+    .item .dot { width: 8px; height: 8px; border-radius: 50%; align-self: center; }
+    .item .dot.text { border-radius: 1px; background: none; border: 1px dashed #e8e4d4; }
+    .item .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .item .name small { font-weight: 400; color: #9a9686; font-size: 0.75rem; margin-left: 0.4rem; }
+    .item .score { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #9a9686; }
+    .none { color: #9a9686; font-size: 0.8rem; }
+
+    .raw-head { display: flex; justify-content: flex-end; margin-top: 0.75rem; }
+    pre { margin-top: 0.5rem; max-height: 26rem; overflow: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; line-height: 1.5; color: #9a9686; background: #0f0f0c; border: 1px solid #2a2a24; border-radius: 6px; padding: 0.75rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+    .back { margin-top: 2rem; text-align: center; font-size: 0.8rem; }
+    .back a { color: #9a9686; text-decoration: none; }
+    .back a:hover { color: #c4a24e; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>mirage</h1>
+    <p class="subtitle">Drop in a photo and see what a 21&nbsp;MB vision model finds in it: objects, text and the scene, drawn over the image. It runs in this tab, so the photo never leaves your device.</p>
+
+    <section class="card">
+      <div class="drop" id="drop" role="button" tabindex="0" aria-describedby="dropHint">
+        <input type="file" id="file" accept="image/*" hidden>
+        <div class="big" id="dropTitle">Drop an image here, or click to browse</div>
+        <div class="small" id="dropHint">You can also paste one from the clipboard.</div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="go" disabled>Describe image</button>
+        <button class="btn" id="clear" disabled>Clear</button>
+        <span class="status" id="status" role="status"></span>
+      </div>
+      <div class="loader" id="loader" hidden>
+        <div>
+          <div class="load-top"><span>cactus.wasm · engine</span><span id="enginePct">&mdash;</span></div>
+          <div class="bar"><i id="engineBar"></i></div>
+        </div>
+        <div>
+          <div class="load-top"><span>mirage.cact · weights</span><span id="modelPct">&mdash;</span></div>
+          <div class="bar"><i id="modelBar"></i></div>
+        </div>
+      </div>
+      <p class="first-note" id="firstNote">The first run downloads the model (about 23&nbsp;MB) and keeps it in this browser for next time.</p>
+    </section>
+
+    <section class="card" id="viewer" hidden>
+      <div class="stage"><canvas id="canvas" aria-label="Your image with the detected objects and text drawn over it"></canvas></div>
+      <div class="toolbar" id="toolbar" hidden>
+        <div class="toggles">
+          <label><input type="checkbox" id="tBoxes" checked> Boxes</label>
+          <label><input type="checkbox" id="tMasks" checked> Masks</label>
+          <label><input type="checkbox" id="tLabels" checked> Labels</label>
+          <label><input type="checkbox" id="tText" checked> Text</label>
+          <label title="Dim everything but the pinned object"><input type="checkbox" id="tSpot" checked> Spotlight</label>
+        </div>
+        <label class="conf">Min confidence
+          <input type="range" id="conf" min="0" max="1" step="0.01" value="0">
+          <output id="confVal" for="conf">0.00</output>
+        </label>
+      </div>
+      <div class="run-meta" id="runMeta" hidden></div>
+    </section>
+
+    <section class="card" id="results" hidden>
+      <div class="section" id="descSec">
+        <h2>Description <span class="count" id="descLang"></span></h2>
+        <p class="lead" id="descLead"></p>
+        <ul class="facts" id="descFacts"></ul>
+      </div>
+      <div class="section" id="sceneSec">
+        <h2>Scene</h2>
+        <div class="pills" id="scenePills"></div>
+      </div>
+      <div class="section cols">
+        <div>
+          <h2>Objects <span class="count" id="objCount"></span></h2>
+          <ul class="items" id="objList"></ul>
+          <p class="none" id="objNone" hidden>No objects found.</p>
+        </div>
+        <div>
+          <h2>Text <span class="count" id="textCount"></span></h2>
+          <ul class="items" id="textList"></ul>
+          <p class="none" id="textNone" hidden>No text found.</p>
+        </div>
+      </div>
+      <div class="section" id="relSec">
+        <h2>Relations</h2>
+        <div class="pills" id="relPills"></div>
+      </div>
+    </section>
+
+    <details class="card" id="rawCard" hidden>
+      <summary>Raw output</summary>
+      <div class="raw-head"><button class="btn sm" id="copyJson">Copy JSON</button></div>
+      <pre id="raw"></pre>
+    </details>
+
+    <section class="card">
+      <h2>How it works</h2>
+      <p><a href="https://huggingface.co/Cactus-Compute/mirage">Mirage</a> is a small vision model from Cactus Compute. One pass over an image returns a scene summary, named objects with boxes and outlines, the text it can read, and how the objects relate. Scores run from 0 to 1.</p>
+      <p>The engine is Cactus's WebAssembly runtime (1.3&nbsp;MB, served from this site). The weights (21.6&nbsp;MB) come from Hugging Face on the first run, are checked against a known SHA-256, and are then kept in this browser. Your image is decoded, scaled to 1024&nbsp;px on its long edge and handed to the model in a background worker; no part of it is sent anywhere.</p>
+      <p class="muted">Engine and weights are Apache-2.0, &copy; Cactus Compute. This page is our own take on <a href="https://github.com/joemaddalone/mirage-demo">Joe Maddalone's mirage-demo</a>.</p>
+    </section>
+
+    <p class="back"><a href="https://apps.andymolenda.com">&larr; apps.andymolenda.com</a></p>
+  </div>
+
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const drop = $('drop'), fileInput = $('file'), goBtn = $('go'), clearBtn = $('clear'), statusEl = $('status');
+    const canvas = $('canvas'), ctx = canvas.getContext('2d');
+    const toggles = { boxes: $('tBoxes'), masks: $('tMasks'), labels: $('tLabels'), text: $('tText'), spot: $('tSpot') };
+
+    const MAX_MODEL_EDGE = 1024;  // long edge handed to the model; its boxes are resolution independent
+    const MAX_VIEW_EDGE = 1600;   // long edge of the on-screen canvas
+    // Overlay colours, one per entity id, chosen to hold up over a photo with dark label text.
+    const PALETTE = ['#c4a24e', '#5fb3d9', '#e0705a', '#8fc46a', '#b58ad6', '#e39a3c', '#4fc4a6', '#e37fa8', '#d6d06a', '#7d94e0'];
+    const TEXT_COLOR = '#e8e4d4';
+    const INK = '#0f0f0c';
+
+    // ---------------------------------------------------------------- state
+
+    let image = null;        // { name, bytes, view: canvas, source: ImageBitmap|HTMLImageElement, w, h }
+    let result = null;       // parsed model output for `image`
+    let minScore = 0;
+    let hover = null;        // { kind: 'obj' | 'text', i }
+    let pinned = -1;         // object index
+    let engineReady = false;
+    let busy = null;         // { id, image, started, timer }
+    let seq = 0;
+
+    const passes = (item) => typeof item?.score !== 'number' || item.score >= minScore;
+    const colorOf = (obj, i) => PALETTE[((Number.isInteger(obj.id) ? obj.id - 1 : i) % PALETTE.length + PALETTE.length) % PALETTE.length];
+    const fmtScore = (s) => (typeof s === 'number' ? s.toFixed(2) : '');
+    const mb = (n) => `${(n / 1e6).toFixed(1)} MB`;
+
+    function setStatus(text, kind = '', spinning = false) {
+      statusEl.className = `status ${kind}`;
+      statusEl.textContent = '';
+      if (spinning) statusEl.append(Object.assign(document.createElement('span'), { className: 'spinner' }));
+      statusEl.append(text);
+    }
+
+    // ---------------------------------------------------------------- engine worker
+
+    const worker = new Worker('./worker.js');
+    worker.onmessage = ({ data }) => {
+      if (data.type === 'progress') onProgress(data);
+      else if (data.type === 'ready') { engineReady = true; $('loader').hidden = true; $('firstNote').hidden = true; }
+      else if (data.type === 'result') onResult(data);
+      else if (data.type === 'error') onError(data.message);
+    };
+    worker.onerror = (e) => onError(e.message || 'the engine worker failed to start');
+
+    function onProgress({ part, received, total, cached }) {
+      const bar = $(part === 'engine' ? 'engineBar' : 'modelBar');
+      const pct = $(part === 'engine' ? 'enginePct' : 'modelPct');
+      const done = total > 0 && received >= total;
+      bar.style.width = total ? `${Math.min(100, (received / total) * 100).toFixed(1)}%` : '0';
+      pct.textContent = cached ? `${mb(received)} · from cache`
+        : done ? mb(received)
+        : total ? `${mb(received)} / ${mb(total)}` : mb(received);
+      if (busy && !engineReady) {
+        setStatus(part === 'model' && done ? 'Starting the model…' : 'Loading engine and weights…', '', true);
+      }
+    }
+
+    function finishRun() {
+      clearInterval(busy.timer);
+      const run = busy;
+      busy = null;
+      syncButtons();
+      return run;
+    }
+
+    function onResult({ id, json, ms }) {
+      if (!busy || id !== busy.id) return;
+      const run = finishRun();
+      // The image was swapped or cleared mid-run: drop this answer, run the new one.
+      if (run.image !== image) { if (image) describe(); else setStatus(''); return; }
+      try {
+        result = JSON.parse(json);
+      } catch {
+        setStatus('The model returned output that is not valid JSON.', 'err');
+        return;
+      }
+      hover = null; pinned = -1;
+      renderResult(json, ms, run);
+    }
+
+    function onError(message) {
+      if (busy) finishRun();
+      setStatus(`${String(message).replace(/\.$/, '')}. Try again.`, 'err');
+    }
+
+    function syncButtons() {
+      goBtn.disabled = !image || !!busy;
+      clearBtn.disabled = !image;
+    }
+
+    function describe() {
+      if (!image || busy) return;
+      const scale = Math.min(1, MAX_MODEL_EDGE / Math.max(image.w, image.h));
+      const w = Math.max(1, Math.round(image.w * scale)), h = Math.max(1, Math.round(image.h * scale));
+      const off = Object.assign(document.createElement('canvas'), { width: w, height: h });
+      const octx = off.getContext('2d', { willReadFrequently: true });
+      // Flatten transparency onto white; the model takes RGB only.
+      octx.fillStyle = '#fff';
+      octx.fillRect(0, 0, w, h);
+      octx.drawImage(image.source, 0, 0, w, h);
+      const rgba = octx.getImageData(0, 0, w, h).data;
+      const rgb = new Uint8Array(w * h * 3);
+      for (let i = 0, j = 0; i < rgba.length; i += 4) { rgb[j++] = rgba[i]; rgb[j++] = rgba[i + 1]; rgb[j++] = rgba[i + 2]; }
+
+      const started = performance.now();
+      const tick = () => {
+        if (engineReady) setStatus(`Describing… ${((performance.now() - started) / 1000).toFixed(1)} s`, '', true);
+      };
+      busy = { id: ++seq, image, started, inputW: w, inputH: h, cold: !engineReady, timer: setInterval(tick, 100) };
+      if (engineReady) tick();
+      else { $('loader').hidden = false; setStatus('Loading engine and weights…', '', true); }
+      syncButtons();
+      worker.postMessage({ type: 'load' });
+      worker.postMessage({ type: 'describe', id: busy.id, rgb, width: w, height: h }, [rgb.buffer]);
+    }
+
+    // ---------------------------------------------------------------- image input
+
+    async function decode(file) {
+      try {
+        return await createImageBitmap(file, { imageOrientation: 'from-image' });
+      } catch {
+        // SVG and a few other formats only decode through an <img>.
+        const url = URL.createObjectURL(file);
+        try {
+          const img = new Image();
+          img.src = url;
+          await img.decode();
+          return img;
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      }
+    }
+
+    async function selectFile(file) {
+      if (!file) return;
+      if (file.type && !file.type.startsWith('image/')) { setStatus('That file is not an image.', 'err'); return; }
+      let source;
+      try {
+        source = await decode(file);
+      } catch {
+        setStatus('This browser could not decode that image. Try a JPG, PNG or WebP.', 'err');
+        return;
+      }
+      const w = source.naturalWidth || source.width, h = source.naturalHeight || source.height;
+      if (!w || !h) { setStatus('That image has no size.', 'err'); return; }
+      const scale = Math.min(1, MAX_VIEW_EDGE / Math.max(w, h));
+      const view = Object.assign(document.createElement('canvas'), { width: Math.max(1, Math.round(w * scale)), height: Math.max(1, Math.round(h * scale)) });
+      view.getContext('2d').drawImage(source, 0, 0, view.width, view.height);
+
+      image = { name: file.name || 'pasted image', bytes: file.size, source, view, w, h };
+      result = null; hover = null; pinned = -1;
+      canvas.width = view.width; canvas.height = view.height;
+      $('viewer').hidden = false;
+      for (const id of ['toolbar', 'runMeta', 'results', 'rawCard']) $(id).hidden = true;
+      drop.classList.add('has-image');
+      $('dropTitle').textContent = image.name;
+      $('dropHint').textContent = `${w} × ${h} px · ${file.size >= 1e6 ? mb(file.size) : `${Math.max(1, Math.round(file.size / 1000))} KB`} · drop, paste or click to change`;
+      draw();
+      syncButtons();
+      // Once the model is in memory a new image costs nothing to start; before that, wait for the click.
+      if (engineReady) describe();
+      else if (!busy) setStatus('Ready.', 'ok');
+    }
+
+    drop.addEventListener('click', () => fileInput.click());
+    drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+    fileInput.addEventListener('change', () => { selectFile(fileInput.files[0]); fileInput.value = ''; });
+    for (const ev of ['dragenter', 'dragover']) drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('drag'); });
+    for (const ev of ['dragleave', 'drop']) drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('drag'); });
+    drop.addEventListener('drop', (e) => selectFile(e.dataTransfer?.files?.[0]));
+    // A photo dropped anywhere else on the page should not navigate away from it.
+    for (const ev of ['dragover', 'drop']) window.addEventListener(ev, (e) => e.preventDefault());
+    document.addEventListener('paste', (e) => {
+      const file = [...(e.clipboardData?.files || [])].find((f) => f.type.startsWith('image/'));
+      if (file) { e.preventDefault(); selectFile(file); }
+    });
+
+    goBtn.addEventListener('click', describe);
+    clearBtn.addEventListener('click', () => {
+      image = null; result = null; hover = null; pinned = -1;
+      for (const id of ['viewer', 'results', 'rawCard']) $(id).hidden = true;
+      drop.classList.remove('has-image');
+      $('dropTitle').textContent = 'Drop an image here, or click to browse';
+      $('dropHint').textContent = 'You can also paste one from the clipboard.';
+      if (!busy) setStatus('');
+      syncButtons();
+    });
+
+    // ---------------------------------------------------------------- results
+
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text != null) node.textContent = text;
+      return node;
+    }
+
+    function pill(key, value) {
+      const p = el('span', 'pill');
+      if (key) p.append(el('span', 'k', key));
+      p.append(String(value));
+      return p;
+    }
+
+    function describeBits(item) {
+      const bits = [];
+      if (item.position) bits.push(item.position);
+      const d = item.description;
+      if (d && typeof d === 'object') for (const v of Object.values(d)) if (v && typeof v !== 'object') bits.push(v);
+      return bits.join(' · ');
+    }
+
+    function renderDescription() {
+      // "lang: en | caption | fact | fact": the first prose segment is the caption.
+      const segments = (typeof result.reasoning === 'string' ? result.reasoning : '').split('|').map((s) => s.trim()).filter(Boolean);
+      const lang = segments[0]?.match(/^lang:\s*([\w-]+)$/i);
+      const prose = lang ? segments.slice(1) : segments;
+      $('descLang').textContent = lang ? lang[1] : '';
+      $('descLead').textContent = prose[0] || '';
+      $('descFacts').replaceChildren(...prose.slice(1).map((s) => el('li', '', s)));
+      $('descSec').hidden = !prose.length;
+    }
+
+    function renderScene() {
+      const pills = [];
+      const scene = result.scene && typeof result.scene === 'object' ? result.scene : {};
+      for (const [k, v] of Object.entries(scene)) {
+        if (v == null || v === '') continue;
+        pills.push(pill(k.replace(/_/g, ' '), typeof v === 'object' ? JSON.stringify(v) : v));
+      }
+      // Regions are named areas without a box: the backdrop the objects sit on.
+      for (const r of Array.isArray(result.regions) ? result.regions : []) {
+        if (!r?.name) continue;
+        const bits = describeBits(r);
+        pills.push(pill('region', bits ? `${r.name} (${bits})` : r.name));
+      }
+      $('scenePills').replaceChildren(...pills);
+      $('sceneSec').hidden = !pills.length;
+    }
+
+    function renderRelations() {
+      const names = new Map();
+      for (const list of [result.objects, result.regions]) {
+        for (const item of Array.isArray(list) ? list : []) if (item && !names.has(item.id)) names.set(item.id, item.name);
+      }
+      const seen = new Set();
+      const pills = [];
+      for (const r of Array.isArray(result.relations) ? result.relations : []) {
+        const s = names.get(r?.subject), o = names.get(r?.object);
+        if (!s || !o || !r.predicate) continue;
+        const key = `${s}|${r.predicate}|${o}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const p = el('span', 'pill');
+        p.append(s, el('span', 'p', r.predicate), o);
+        pills.push(p);
+      }
+      for (const e of Array.isArray(result.events) ? result.events : []) {
+        pills.push(pill('event', typeof e === 'object' ? JSON.stringify(e) : e));
+      }
+      $('relPills').replaceChildren(...pills);
+      $('relSec').hidden = !pills.length;
+    }
+
+    function countLabel(shown, total) {
+      return shown < total ? `${shown} of ${total}` : String(total);
+    }
+
+    function renderLists() {
+      const objects = objectsOf(), texts = textsOf();
+
+      const objRows = [];
+      objects.forEach((obj, i) => {
+        if (!passes(obj)) return;
+        const row = el('button', 'item');
+        row.dataset.kind = 'obj'; row.dataset.i = i;
+        const dot = el('span', 'dot');
+        dot.style.background = colorOf(obj, i);
+        const name = el('span', 'name', obj.name || 'object');
+        const bits = describeBits(obj);
+        if (bits) name.append(el('small', '', bits));
+        row.title = 'Click to pin';
+        row.append(dot, name, el('span', 'score', fmtScore(obj.score)));
+        objRows.push(el('li'));
+        objRows.at(-1).append(row);
+      });
+      $('objList').replaceChildren(...objRows);
+      $('objCount').textContent = objects.length ? countLabel(objRows.length, objects.length) : '';
+      $('objNone').hidden = objects.length > 0;
+
+      const textRows = [];
+      texts.forEach((t, i) => {
+        if (!passes(t)) return;
+        const row = el('button', 'item');
+        row.dataset.kind = 'text'; row.dataset.i = i;
+        row.title = 'Click to copy';
+        row.append(el('span', 'dot text'), el('span', 'name', t.string || '(unreadable)'), el('span', 'score', fmtScore(t.score)));
+        textRows.push(el('li'));
+        textRows.at(-1).append(row);
+      });
+      $('textList').replaceChildren(...textRows);
+      $('textCount').textContent = texts.length ? countLabel(textRows.length, texts.length) : '';
+      $('textNone').hidden = texts.length > 0;
+      syncRows();
+    }
+
+    function syncRows() {
+      for (const row of document.querySelectorAll('.item')) {
+        const i = Number(row.dataset.i), kind = row.dataset.kind;
+        row.classList.toggle('active', !!hover && hover.kind === kind && hover.i === i);
+        row.classList.toggle('pinned', kind === 'obj' && i === pinned);
+        if (kind === 'obj') row.setAttribute('aria-pressed', String(i === pinned));
+      }
+    }
+
+    function setHover(next) {
+      if (hover?.kind === next?.kind && hover?.i === next?.i) return;
+      hover = next;
+      syncRows();
+      draw();
+    }
+
+    function togglePin(i) {
+      pinned = pinned === i ? -1 : i;
+      syncRows();
+      draw();
+    }
+
+    function wireList(list) {
+      const target = (e) => e.target.closest('.item');
+      const ref = (row) => ({ kind: row.dataset.kind, i: Number(row.dataset.i) });
+      list.addEventListener('pointerover', (e) => { const row = target(e); if (row) setHover(ref(row)); });
+      list.addEventListener('pointerleave', () => setHover(null));
+      list.addEventListener('focusin', (e) => { const row = target(e); if (row) setHover(ref(row)); });
+      list.addEventListener('focusout', () => setHover(null));
+      list.addEventListener('click', async (e) => {
+        const row = target(e);
+        if (!row) return;
+        const { kind, i } = ref(row);
+        if (kind === 'obj') { togglePin(i); return; }
+        const string = textsOf()[i]?.string;
+        if (!string) return;
+        const score = row.querySelector('.score');
+        const was = score.textContent;
+        score.textContent = (await copy(string)) ? 'copied' : 'copy failed';
+        setTimeout(() => { score.textContent = was; }, 1200);
+      });
+    }
+    wireList($('objList'));
+    wireList($('textList'));
+
+    async function copy(text) {
+      try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
+    }
+
+    $('copyJson').addEventListener('click', async () => {
+      const btn = $('copyJson');
+      btn.textContent = (await copy($('raw').textContent)) ? 'Copied' : 'Copy failed';
+      setTimeout(() => { btn.textContent = 'Copy JSON'; }, 1200);
+    });
+
+    function renderResult(json, ms, run) {
+      renderDescription();
+      renderScene();
+      renderRelations();
+      renderLists();
+      // Indented, but with each box and outline kept on one line.
+      $('raw').textContent = JSON.stringify(result, null, 2)
+        .replace(/\[\s*-?[\d.]+(?:,\s*-?[\d.]+)*\s*\]/g, (m) => m.replace(/\s+/g, '').replace(/,/g, ', '));
+      for (const id of ['toolbar', 'runMeta', 'results', 'rawCard']) $(id).hidden = false;
+      const total = (performance.now() - run.started) / 1000;
+      const no = objectsOf().length, nt = textsOf().length;
+      $('runMeta').textContent = `model ${(ms / 1000).toFixed(2)} s on ${run.inputW}×${run.inputH} px`
+        + (run.cold ? ` · ${total.toFixed(1)} s with engine and weights load` : '');
+      setStatus(`Found ${no} object${no === 1 ? '' : 's'} and ${nt} text string${nt === 1 ? '' : 's'} in ${(ms / 1000).toFixed(1)} s.`, 'ok');
+      draw();
+    }
+
+    $('conf').addEventListener('input', () => {
+      minScore = Number($('conf').value);
+      $('confVal').textContent = minScore.toFixed(2);
+      if (!result) return;
+      if (pinned >= 0 && !passes(objectsOf()[pinned])) pinned = -1;
+      hover = null;
+      renderLists();
+      draw();
+    });
+    for (const t of Object.values(toggles)) t.addEventListener('change', draw);
+
+    // ---------------------------------------------------------------- canvas
+
+    const objectsOf = () => (Array.isArray(result?.objects) ? result.objects : []);
+    const textsOf = () => (Array.isArray(result?.text) ? result.text : []);
+    const hasBox = (item) => Array.isArray(item?.bbox) && item.bbox.length === 4;
+    const hasMask = (item) => Array.isArray(item?.mask) && item.mask.length >= 6;
+
+    // Model coordinates are 0-1000 on both axes, whatever the image's shape.
+    function boxPx(bbox) {
+      const sx = canvas.width / 1000, sy = canvas.height / 1000;
+      return [bbox[0] * sx, bbox[1] * sy, (bbox[2] - bbox[0]) * sx, (bbox[3] - bbox[1]) * sy];
+    }
+
+    function outline(obj) {
+      const path = new Path2D();
+      if (hasMask(obj)) {
+        const sx = canvas.width / 1000, sy = canvas.height / 1000;
+        for (let k = 0; k + 1 < obj.mask.length; k += 2) {
+          if (k === 0) path.moveTo(obj.mask[k] * sx, obj.mask[k + 1] * sy);
+          else path.lineTo(obj.mask[k] * sx, obj.mask[k + 1] * sy);
+        }
+        path.closePath();
+      } else if (hasBox(obj)) {
+        path.rect(...boxPx(obj.bbox));
+      }
+      return path;
+    }
+
+    function rgba(hex, alpha) {
+      const n = parseInt(hex.slice(1), 16);
+      return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${alpha})`;
+    }
+
+    function drawLabel(text, x, y, h, color, u, above) {
+      const pad = 4 * u, height = 12 * u + pad * 2;
+      const width = ctx.measureText(text).width + pad * 2;
+      let ly = above ? y - height : y + h;
+      if (ly < 0) ly = y;
+      if (ly + height > canvas.height) ly = Math.max(0, y + h - height);
+      const lx = Math.max(0, Math.min(x, canvas.width - width));
+      ctx.fillStyle = color;
+      ctx.fillRect(lx, ly, width, height);
+      ctx.fillStyle = INK;
+      ctx.fillText(text, lx + pad, ly + pad + 0.5 * u);
+    }
+
+    function draw() {
+      if (!image) return;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.setLineDash([]);
+      ctx.drawImage(image.view, 0, 0);
+      if (!result) return;
+
+      // `u` is one CSS pixel in canvas pixels, so strokes and labels keep their
+      // on-screen size whatever the photo's resolution.
+      const u = canvas.width / (canvas.getBoundingClientRect().width || canvas.width);
+      const objects = objectsOf(), texts = textsOf();
+      const show = Object.fromEntries(Object.entries(toggles).map(([k, t]) => [k, t.checked]));
+      const hoverObj = hover?.kind === 'obj' ? hover.i : -1;
+      const hoverText = hover?.kind === 'text' ? hover.i : -1;
+      const active = hoverObj >= 0 ? hoverObj : pinned;
+      const focused = active >= 0 || hoverText >= 0;
+
+      if (show.spot && pinned >= 0 && passes(objects[pinned])) {
+        const dim = new Path2D();
+        dim.rect(0, 0, canvas.width, canvas.height);
+        dim.addPath(outline(objects[pinned]));
+        ctx.fillStyle = 'rgba(15,15,12,0.68)';
+        ctx.fill(dim, 'evenodd');
+      }
+
+      ctx.font = `600 ${12 * u}px Inter, system-ui, sans-serif`;
+      ctx.textBaseline = 'top';
+      ctx.lineJoin = 'round';
+
+      const order = objects.map((_, i) => i).filter((i) => passes(objects[i]) && i !== active);
+      if (active >= 0 && passes(objects[active])) order.push(active); // active one on top
+
+      for (const i of order) {
+        const obj = objects[i], color = colorOf(obj, i), isActive = i === active;
+        ctx.globalAlpha = focused && !isActive ? 0.3 : 1;
+        if ((show.masks || isActive) && hasMask(obj)) {
+          const path = outline(obj);
+          ctx.fillStyle = rgba(color, isActive ? 0.45 : 0.25);
+          ctx.fill(path);
+          ctx.strokeStyle = rgba(color, 0.95);
+          ctx.lineWidth = (isActive ? 2 : 1) * u;
+          ctx.stroke(path);
+        }
+        if (!hasBox(obj)) continue;
+        const [x, y, w, h] = boxPx(obj.bbox);
+        if (show.boxes || (isActive && !hasMask(obj))) {
+          ctx.strokeStyle = color;
+          ctx.lineWidth = (isActive ? 3 : 1.5) * u;
+          ctx.strokeRect(x, y, w, h);
+        }
+        if (show.labels || isActive) {
+          const label = (obj.name || 'object') + (isActive && typeof obj.score === 'number' ? ` ${fmtScore(obj.score)}` : '');
+          drawLabel(label, x, y, h, color, u, true);
+        }
+      }
+
+      if (show.text || hoverText >= 0) {
+        texts.forEach((t, i) => {
+          if (!hasBox(t) || !passes(t)) return;
+          const isActive = i === hoverText;
+          if (!show.text && !isActive) return;
+          const [x, y, w, h] = boxPx(t.bbox);
+          ctx.globalAlpha = focused && !isActive ? 0.3 : 1;
+          // Dark underlay keeps the dashes readable on light paper.
+          ctx.setLineDash([]);
+          ctx.strokeStyle = 'rgba(15,15,12,0.7)';
+          ctx.lineWidth = (isActive ? 4 : 2.5) * u;
+          ctx.strokeRect(x, y, w, h);
+          ctx.setLineDash([5 * u, 3 * u]);
+          ctx.strokeStyle = TEXT_COLOR;
+          ctx.lineWidth = (isActive ? 2.5 : 1.25) * u;
+          ctx.strokeRect(x, y, w, h);
+          ctx.setLineDash([]);
+          // Strings are only spelled out for the hovered box; a label on each would bury the page.
+          if (isActive && t.string) drawLabel(`“${t.string}” ${fmtScore(t.score)}`.trim(), x, y, h, TEXT_COLOR, u, false);
+        });
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // Smallest box under the pointer wins, so a cup beats the table it stands on.
+    function hit(e) {
+      if (!result) return null;
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return null;
+      const nx = ((e.clientX - rect.left) / rect.width) * 1000, ny = ((e.clientY - rect.top) / rect.height) * 1000;
+      let best = null, bestArea = Infinity;
+      const consider = (list, kind) => list.forEach((item, i) => {
+        if (!hasBox(item) || !passes(item)) return;
+        const [x1, y1, x2, y2] = item.bbox;
+        if (nx < x1 || nx > x2 || ny < y1 || ny > y2) return;
+        const area = (x2 - x1) * (y2 - y1);
+        if (area < bestArea) { bestArea = area; best = { kind, i }; }
+      });
+      if (toggles.boxes.checked || toggles.masks.checked || toggles.labels.checked) consider(objectsOf(), 'obj');
+      if (toggles.text.checked) consider(textsOf(), 'text');
+      return best;
+    }
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch') return; // touch pins on tap instead
+      const h = hit(e);
+      setHover(h);
+      canvas.style.cursor = h?.kind === 'obj' ? 'pointer' : 'default';
+    });
+    canvas.addEventListener('pointerleave', () => setHover(null));
+    canvas.addEventListener('click', (e) => {
+      const h = hit(e);
+      if (h?.kind === 'obj') togglePin(h.i);
+      else if (pinned >= 0) togglePin(pinned);
+    });
+    // Stroke widths follow the canvas's on-screen size.
+    new ResizeObserver(() => draw()).observe(canvas);
+  </script>
+</body>
+</html>

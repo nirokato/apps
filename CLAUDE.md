@@ -18,6 +18,7 @@ projects/
   zmk-keymap/            Landing page + download for a KDE Plasma ZMK keymap widget
   bubble-share/          Interactive showcase of Bubble Share (FOSS Wi-Fi Aware sharing for Android)
   github-uptime/         GitHub's monthly uptime history, charted from githubstatus.com
+  mirage/                In-browser image description (objects, text, scene) with the Mirage vision model
 tofu/                    OpenTofu infrastructure (Cloudflare Pages + DNS)
 tools/
   trove-ingest/          Node script: Printables metadata -> trove index.json
@@ -51,6 +52,7 @@ The deploy matrix is auto-discovered from the `projects/` directory — **no wor
 | zmk-keymap | `projects/zmk-keymap/` | `zmk-keymap.apps.andymolenda.com` | Landing page for a KDE Plasma widget showing a ZMK keyboard's keymap (*just for fun*) |
 | bubble-share | `projects/bubble-share/` | `bubble-share.apps.andymolenda.com` | Interactive showcase of [Bubble Share](https://codeberg.org/s1m/bubble-share), a FOSS Wi-Fi Aware file/clipboard sharing app for Android: two-phone simulator plus key-schedule, wire-format and NFC labs |
 | github-uptime | `projects/github-uptime/` | `github-uptime.apps.andymolenda.com` | GitHub's monthly uptime since 2017, charted from its status page |
+| mirage | `projects/mirage/` | `mirage.apps.andymolenda.com` | Drop in a photo; the Mirage vision model describes it (objects, text, scene, relations) in the browser via WebAssembly |
 
 ## Project classes
 
@@ -124,6 +126,8 @@ For a *just for fun* project, tag the name: `<div class="project-name"><name><sp
 - **Exception: zmk-keymap** is a landing page, not an app. The widget lives in its own repo (`nirokato/plasma-zmk-keymap`); the download button links to that repo's `releases/latest/download/` asset, so widget releases need no change here. `tiles.png` is rendered by the widget repo's `tools/preview.sh` in this site's palette.
 
 - **Exception: github-uptime** is a no-build port of [DaMrNelson/github-historical-uptime](https://github.com/DaMrNelson/github-historical-uptime) (MIT; notice kept in `projects/github-uptime/LICENSE.txt`). Chart.js + the annotation plugin from CDN. Its container is 900px wide, not 600px, because ten years of monthly points need the width. Data comes from `tools/github-uptime-ingest/ingest.mjs` (zero-dependency Node), which scrapes `githubstatus.com/uptime/<component_id>?page=N` (`Accept: application/json`) and writes a ~20 KB per-month summary to `projects/github-uptime/data/uptime.json`; the raw scrape (~4.5 MB) is never committed. The ingest refuses to write fewer months than are committed (`--force` overrides). The Month to date tab is the one live part: the browser fetches the current month from the same endpoint's page 1 when the tab opens. The status page sends `Access-Control-Allow-Origin: *`, but answers a CORS preflight with a 302, so those fetches send only the safelisted `Accept` header.
+
+- **Exception: mirage** is our own take on [joemaddalone/mirage-demo](https://github.com/joemaddalone/mirage-demo). That repo carries no license, so nothing is copied from it; the page and worker are written from scratch against Cactus's C API (`cactus.h`). Its container is 900px wide for the photo. `vendor/` holds Cactus Compute's prebuilt WebAssembly runtime (`cactus.js` + `cactus.wasm`, Apache-2.0, license in `vendor/LICENSE.txt`), copied unmodified from `huggingface.co/Cactus-Compute/cactus` under `releases/<version>/wasm/`; check new copies against that release's `manifest.json`. The weights (`mirage.cact`, 21.6 MB, Apache-2.0) are not committed: `worker.js` fetches them from Hugging Face at a pinned commit, checks their SHA-256, and keeps them in Cache Storage. To move to new weights, change `url`, `size` and `sha256` in `worker.js` together. Inference runs in a Web Worker (`worker.js`), which is why the project is two files and not one. No automated tests; to check a change, serve the directory and describe an image.
 
 ## Deployment
 
