@@ -95,24 +95,50 @@
     .load-top { display: flex; justify-content: space-between; gap: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #9a9686; margin-bottom: 0.25rem; }
     .bar { height: 4px; background: #2a2a24; border-radius: 2px; overflow: hidden; }
     .bar i { display: block; height: 100%; width: 0; background: #c4a24e; transition: width 0.15s linear; }
-    .cam video { display: block; width: 100%; max-height: 70vh; background: #0f0f0c; border: 1px solid #2a2a24; border-radius: 6px; object-fit: contain; }
+    /* Camera: controls sit over the live view, shutter in the middle. */
+    .cam { position: relative; background: #0f0f0c; border: 1px solid #2a2a24; border-radius: 6px; overflow: hidden; }
+    .cam video { display: block; width: 100%; max-height: 70vh; object-fit: contain; }
     .cam video.mirror { transform: scaleX(-1); }
+    .cam-controls { position: absolute; left: 0; right: 0; bottom: 0.75rem; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 1rem; padding: 0 0.75rem; }
+    .cam-controls .side { font-size: 0.8rem; font-weight: 600; color: #e8e4d4; background: rgba(15, 15, 12, 0.7); border: 1px solid rgba(232, 228, 212, 0.25); border-radius: 999px; min-height: 2.5rem; padding: 0 1rem; }
+    .cam-controls #camFlip { justify-self: end; }
+    .cam-controls #camCancel { justify-self: start; }
+    .shutter { width: 4rem; height: 4rem; border-radius: 50%; background: #e8e4d4; border: 4px solid rgba(15, 15, 12, 0.55); box-shadow: 0 0 0 2px #e8e4d4; }
+    .shutter:active:not(:disabled) { transform: scale(0.94); }
+    .shutter:disabled { opacity: 0.4; cursor: default; }
     .cam-open #drop, .cam-open #mainActions .btn { display: none; }
     .cam-open #mainActions { margin-top: 0.5rem; }
     .first-note { margin-top: 0.75rem; font-size: 0.75rem; color: #9a9686; }
 
-    /* Viewer */
-    .stage { background: #0f0f0c; border: 1px solid #2a2a24; border-radius: 6px; overflow: hidden; display: flex; justify-content: center; }
-    .stage canvas { display: block; max-width: 100%; max-height: 75vh; width: auto; height: auto; touch-action: manipulation; }
-    .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem 1.25rem; flex-wrap: wrap; margin-top: 0.75rem; font-size: 0.8rem; color: #9a9686; }
-    .toggles { display: flex; gap: 0.35rem 0.9rem; flex-wrap: wrap; }
-    .toggles label { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; }
-    .toggles label:hover { color: #e8e4d4; }
-    input[type="checkbox"], input[type="range"] { accent-color: #c4a24e; }
-    .conf { display: inline-flex; align-items: center; gap: 0.5rem; }
-    .conf input { width: 9rem; }
-    .conf output { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #e8e4d4; min-width: 2.2rem; }
-    .run-meta { margin-top: 0.6rem; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #9a9686; overflow-wrap: anywhere; }
+    /* Viewer. Once there is a result it sticks to the top of the viewport, so
+       the photo stays in sight while the lists scroll under it. */
+    #viewer.has-result { position: sticky; top: 0; z-index: 5; box-shadow: 0 10px 18px -10px rgba(0, 0, 0, 0.8); }
+    .stage { position: relative; background: #0f0f0c; border: 1px solid #2a2a24; border-radius: 6px; overflow: hidden; display: flex; justify-content: center; }
+    .stage canvas { display: block; max-width: 100%; max-height: 65vh; width: auto; height: auto; touch-action: manipulation; }
+    #viewer.has-result .stage canvas { max-height: 48vh; }
+    .stage.busy canvas { filter: brightness(0.6); transition: filter 0.2s; }
+    .stage.busy::after {
+      content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 35%;
+      background: linear-gradient(90deg, transparent, rgba(196, 162, 78, 0.28), transparent);
+      animation: sweep 1.3s ease-in-out infinite;
+    }
+    @keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+    @media (prefers-reduced-motion: reduce) { .stage.busy::after { animation: none; display: none; } }
+    .chips { display: flex; gap: 0.4rem; margin-top: 0.6rem; overflow-x: auto; scrollbar-width: none; }
+    .chips::-webkit-scrollbar { display: none; }
+    .chip {
+      position: relative; display: inline-flex; align-items: center; min-height: 2rem; padding: 0 0.8rem; flex: none;
+      border: 1px solid #2a2a24; border-radius: 999px; font-size: 0.8rem; font-weight: 600; color: #9a9686;
+      cursor: pointer; white-space: nowrap; user-select: none; -webkit-user-select: none;
+    }
+    .chip input { position: absolute; opacity: 0; pointer-events: none; }
+    .chip:has(input:checked) { color: #e8e4d4; border-color: #c4a24e; background: rgba(196, 162, 78, 0.12); }
+    .chip:has(input:focus-visible) { outline: 2px solid #c4a24e; outline-offset: 2px; }
+    @media (max-width: 700px) {
+      #viewer.has-result { margin-left: -1rem; margin-right: -1rem; border-radius: 0; border-left: 0; border-right: 0; padding: 0.6rem 1rem; }
+      #viewer.has-result .stage canvas { max-height: 38vh; }
+    }
+    @media (pointer: coarse) { .chip { min-height: 2.5rem; } }
 
     /* Results */
     .section + .section { margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid #2a2a24; }
@@ -124,22 +150,42 @@
     .pill { border: 1px solid #2a2a24; border-radius: 6px; padding: 0.2rem 0.55rem; font-size: 0.8rem; }
     .pill .k { color: #9a9686; margin-right: 0.4rem; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
     .pill .p { color: #c4a24e; margin: 0 0.35rem; }
-    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem 1.5rem; }
+    .filter { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem 1.25rem; flex-wrap: wrap; font-size: 0.8rem; color: #9a9686; }
+    input[type="range"] { accent-color: #c4a24e; }
+    .conf { display: inline-flex; align-items: center; gap: 0.5rem; }
+    .conf input { width: 9rem; }
+    .conf output { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #e8e4d4; min-width: 2.2rem; }
+    .hint { margin-top: 0.6rem; font-size: 0.75rem; color: #9a9686; }
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem 1.5rem; margin-top: 1rem; }
     @media (max-width: 700px) { .cols { grid-template-columns: 1fr; } }
     .cols > div { min-width: 0; }
-    .items { list-style: none; max-height: 22rem; overflow-y: auto; margin: 0 -0.5rem; }
+    .items, .items ul { list-style: none; }
+    .items { margin: 0 -0.5rem; }
+    .items ul { margin-left: 1.1rem; border-left: 1px solid #2a2a24; }
     .item {
       display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 0 0.6rem;
       width: 100%; text-align: left; color: inherit; background: none; border: 0; border-radius: 6px; padding: 0.3rem 0.5rem;
     }
-    .item:hover, .item.active { background: #24241f; }
+    @media (pointer: coarse) { .item { padding: 0.6rem 0.5rem; } }
+    @media (hover: hover) { .item:hover { background: #24241f; } }
+    .item.active { background: #24241f; }
     .item.pinned { box-shadow: inset 2px 0 0 #c4a24e; }
     .item .dot { width: 8px; height: 8px; border-radius: 50%; align-self: center; }
     .item .dot.text { border-radius: 1px; background: none; border: 1px dashed #e8e4d4; }
     .item .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .item .name small { font-weight: 400; color: #9a9686; font-size: 0.75rem; margin-left: 0.4rem; }
+    .item .name .n { color: #c4a24e; font-family: 'JetBrains Mono', monospace; }
     .item .score { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #9a9686; }
+    .more { margin: 0.4rem 0 0; }
     .none { color: #9a9686; font-size: 0.8rem; }
+    .run-meta { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #9a9686; overflow-wrap: anywhere; }
+
+    .toast {
+      position: fixed; left: 50%; bottom: 1.25rem; transform: translate(-50%, 1rem); z-index: 20; max-width: calc(100vw - 2rem);
+      background: #e8e4d4; color: #0f0f0c; font-size: 0.8rem; font-weight: 600; border-radius: 999px; padding: 0.45rem 1rem;
+      opacity: 0; pointer-events: none; transition: opacity 0.15s, transform 0.15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
     .raw-head { display: flex; justify-content: flex-end; margin-top: 0.75rem; }
     pre { margin-top: 0.5rem; max-height: 26rem; overflow: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; line-height: 1.5; color: #9a9686; background: #0f0f0c; border: 1px solid #2a2a24; border-radius: 6px; padding: 0.75rem; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -164,16 +210,16 @@
       </div>
       <div class="cam" id="cam" hidden>
         <video id="camVideo" playsinline muted autoplay aria-label="Live camera preview"></video>
-        <div class="actions">
-          <button class="btn primary" id="camSnap" disabled>Capture</button>
-          <button class="btn" id="camFlip" hidden>Switch camera</button>
-          <button class="btn" id="camCancel">Cancel</button>
+        <div class="cam-controls">
+          <button class="side" id="camCancel">Cancel</button>
+          <button class="shutter" id="camSnap" aria-label="Take the photo" disabled></button>
+          <button class="side" id="camFlip" hidden>Flip</button>
         </div>
       </div>
       <div class="actions" id="mainActions">
-        <button class="btn primary" id="go" disabled>Describe image</button>
+        <button class="btn primary" id="go" hidden>Describe image</button>
         <button class="btn" id="shoot" hidden>Take photo</button>
-        <button class="btn" id="clear" disabled>Clear</button>
+        <button class="btn" id="clear" hidden>Start over</button>
         <span class="status" id="status" role="status"></span>
       </div>
       <div class="loader" id="loader" hidden>
@@ -190,21 +236,13 @@
     </section>
 
     <section class="card" id="viewer" hidden>
-      <div class="stage"><canvas id="canvas" aria-label="Your image with the detected objects and text drawn over it"></canvas></div>
-      <div class="toolbar" id="toolbar" hidden>
-        <div class="toggles">
-          <label><input type="checkbox" id="tBoxes" checked> Boxes</label>
-          <label><input type="checkbox" id="tMasks" checked> Masks</label>
-          <label><input type="checkbox" id="tLabels" checked> Labels</label>
-          <label><input type="checkbox" id="tText" checked> Text</label>
-          <label title="Dim everything but the pinned object"><input type="checkbox" id="tSpot" checked> Spotlight</label>
-        </div>
-        <label class="conf">Min confidence
-          <input type="range" id="conf" min="0" max="1" step="0.01" value="0">
-          <output id="confVal" for="conf">0.00</output>
-        </label>
+      <div class="stage" id="stage"><canvas id="canvas" aria-label="Your image with the detected objects and text drawn over it"></canvas></div>
+      <div class="chips" id="toolbar" role="group" aria-label="What to draw over the photo" hidden>
+        <label class="chip"><input type="checkbox" id="tBoxes" checked>Boxes</label>
+        <label class="chip"><input type="checkbox" id="tMasks" checked>Outlines</label>
+        <label class="chip"><input type="checkbox" id="tLabels" checked>Labels</label>
+        <label class="chip"><input type="checkbox" id="tText" checked>Text</label>
       </div>
-      <div class="run-meta" id="runMeta" hidden></div>
     </section>
 
     <section class="card" id="results" hidden>
@@ -217,22 +255,34 @@
         <h2>Scene</h2>
         <div class="pills" id="scenePills"></div>
       </div>
-      <div class="section cols">
-        <div>
-          <h2>Objects <span class="count" id="objCount"></span></h2>
-          <ul class="items" id="objList"></ul>
-          <p class="none" id="objNone" hidden>No objects found.</p>
+      <div class="section">
+        <div class="filter">
+          <label class="conf">Confidence at least
+            <input type="range" id="conf" min="0" max="1" step="0.01" value="0.3">
+            <output id="confVal" for="conf">0.30</output>
+          </label>
+          <button class="btn sm" id="save">Save annotated image</button>
         </div>
-        <div>
-          <h2>Text <span class="count" id="textCount"></span></h2>
-          <ul class="items" id="textList"></ul>
-          <p class="none" id="textNone" hidden>No text found.</p>
+        <p class="hint" id="hint"></p>
+        <div class="cols">
+          <div>
+            <h2>Objects <span class="count" id="objCount"></span></h2>
+            <ul class="items" id="objList"></ul>
+            <p class="none" id="objNone" hidden></p>
+          </div>
+          <div>
+            <h2>Text <span class="count" id="textCount"></span></h2>
+            <ul class="items" id="textList"></ul>
+            <button class="btn sm more" id="textMore" hidden></button>
+            <p class="none" id="textNone" hidden></p>
+          </div>
         </div>
       </div>
       <div class="section" id="relSec">
         <h2>Relations</h2>
         <div class="pills" id="relPills"></div>
       </div>
+      <div class="section run-meta" id="runMeta"></div>
     </section>
 
     <details class="card" id="rawCard" hidden>
@@ -248,6 +298,8 @@
       <p class="muted">Engine and weights are Apache-2.0, &copy; Cactus Compute. This page is our own take on <a href="https://github.com/joemaddalone/mirage-demo">Joe Maddalone's mirage-demo</a>.</p>
     </section>
 
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
     <p class="back"><a href="https://apps.andymolenda.com">&larr; apps.andymolenda.com</a></p>
   </div>
 
@@ -255,7 +307,8 @@
     const $ = (id) => document.getElementById(id);
     const drop = $('drop'), fileInput = $('file'), goBtn = $('go'), clearBtn = $('clear'), statusEl = $('status');
     const canvas = $('canvas'), ctx = canvas.getContext('2d');
-    const toggles = { boxes: $('tBoxes'), masks: $('tMasks'), labels: $('tLabels'), text: $('tText'), spot: $('tSpot') };
+    const toggles = { boxes: $('tBoxes'), masks: $('tMasks'), labels: $('tLabels'), text: $('tText') };
+    const viewer = $('viewer'), stage = $('stage');
 
     const MAX_MODEL_EDGE = 1024;  // long edge handed to the model; its boxes are resolution independent
     const MAX_VIEW_EDGE = 1600;   // long edge of the on-screen canvas
@@ -268,8 +321,8 @@
 
     let image = null;        // { name, bytes, view: canvas, source: ImageBitmap|HTMLImageElement, w, h }
     let result = null;       // parsed model output for `image`
-    let minScore = 0;
-    let hover = null;        // { kind: 'obj' | 'text', i }
+    let minScore = 0.3;      // most of the clutter on a busy photo sits below this
+    let hover = null;        // { kind: 'obj' | 'text', i } or { kind: 'group', key }
     let pinned = -1;         // object index
     let engineReady = false;
     let busy = null;         // { id, image, started, timer }
@@ -315,6 +368,7 @@
       clearInterval(busy.timer);
       const run = busy;
       busy = null;
+      stage.classList.remove('busy');
       syncButtons();
       return run;
     }
@@ -331,6 +385,8 @@
         return;
       }
       hover = null; pinned = -1;
+      openGroups.clear(); textAll = false;
+      syncButtons();
       renderResult(json, ms, run);
     }
 
@@ -339,9 +395,18 @@
       setStatus(`${String(message).replace(/\.$/, '')}. Try again.`, 'err');
     }
 
+    // One primary action at a time: take a photo, then describe it. Once a photo
+    // has its result there is nothing left to press but a way to start again.
     function syncButtons() {
-      goBtn.disabled = !image || !!busy;
-      clearBtn.disabled = !image;
+      goBtn.hidden = !image || !!result || !!busy;
+      clearBtn.hidden = !image;
+      shootBtn.classList.toggle('primary', !image);
+    }
+
+    function bringIntoView(node) {
+      const { top } = node.getBoundingClientRect();
+      if (top >= 0 && top < innerHeight * 0.4) return;
+      node.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
     }
 
     function describe() {
@@ -365,7 +430,9 @@
       busy = { id: ++seq, image, started, inputW: w, inputH: h, cold: !engineReady, timer: setInterval(tick, 100) };
       if (engineReady) tick();
       else { $('loader').hidden = false; setStatus('Loading engine and weights…', '', true); }
+      stage.classList.add('busy');
       syncButtons();
+      bringIntoView(viewer);
       worker.postMessage({ type: 'load' });
       worker.postMessage({ type: 'describe', id: busy.id, rgb, width: w, height: h }, [rgb.buffer]);
     }
@@ -389,7 +456,7 @@
       }
     }
 
-    async function selectFile(file) {
+    async function selectFile(file, { auto = false } = {}) {
       if (!file) return;
       if (file.type && !file.type.startsWith('image/')) { setStatus('That file is not an image.', 'err'); return; }
       let source;
@@ -408,16 +475,18 @@
       image = { name: file.name || 'pasted image', bytes: file.size, source, view, w, h };
       result = null; hover = null; pinned = -1;
       canvas.width = view.width; canvas.height = view.height;
-      $('viewer').hidden = false;
-      for (const id of ['toolbar', 'runMeta', 'results', 'rawCard']) $(id).hidden = true;
+      viewer.hidden = false;
+      viewer.classList.remove('has-result');
+      for (const id of ['toolbar', 'results', 'rawCard']) $(id).hidden = true;
       drop.classList.add('has-image');
       $('dropTitle').textContent = image.name;
       $('dropHint').textContent = `${w} × ${h} px · ${file.size >= 1e6 ? mb(file.size) : `${Math.max(1, Math.round(file.size / 1000))} KB`} · ${coarse ? 'tap' : 'drop, paste or click'} to change`;
       draw();
       syncButtons();
-      // Once the model is in memory a new image costs nothing to start; before that, wait for the click.
-      if (engineReady) describe();
-      else if (!busy) setStatus('Ready.', 'ok');
+      // A photo just taken is meant to be described. For a chosen file, start at once
+      // only when the model is already in memory; the first run is a 23 MB download.
+      if (auto || engineReady) describe();
+      else if (!busy) setStatus('');
     }
 
     drop.addEventListener('click', () => fileInput.click());
@@ -438,9 +507,10 @@
     const idleHint = coarse ? 'Or take a photo with the button below.' : 'You can also paste one from the clipboard.';
     const idleTitle = coarse ? 'Tap to choose an image' : 'Drop an image here, or click to browse';
     shootBtn.hidden = !(hasCamApi || coarse);
+    syncButtons();
     $('dropHint').textContent = idleHint;
     $('dropTitle').textContent = idleTitle;
-    cameraInput.addEventListener('change', () => { selectFile(cameraInput.files[0]); cameraInput.value = ''; });
+    cameraInput.addEventListener('change', () => { selectFile(cameraInput.files[0], { auto: true }); cameraInput.value = ''; });
 
     let camStream = null;
     let camFacing = 'environment';
@@ -522,7 +592,7 @@
       stopCamera();
       shot.toBlob((blob) => {
         if (!blob) { setStatus('The photo could not be saved. Try again.', 'err'); return; }
-        selectFile(new File([blob], 'camera photo.jpg', { type: 'image/jpeg' }));
+        selectFile(new File([blob], 'camera photo.jpg', { type: 'image/jpeg' }), { auto: true });
       }, 'image/jpeg', 0.92);
     });
     // Never leave the camera running behind a hidden tab.
@@ -542,6 +612,7 @@
     clearBtn.addEventListener('click', () => {
       image = null; result = null; hover = null; pinned = -1;
       for (const id of ['viewer', 'results', 'rawCard']) $(id).hidden = true;
+      viewer.classList.remove('has-result');
       drop.classList.remove('has-image');
       $('dropTitle').textContent = idleTitle;
       $('dropHint').textContent = idleHint;
@@ -550,6 +621,28 @@
     });
 
     // ---------------------------------------------------------------- results
+
+    const objectsOf = () => (Array.isArray(result?.objects) ? result.objects : []);
+    const textsOf = () => (Array.isArray(result?.text) ? result.text : []);
+    const hasBox = (item) => Array.isArray(item?.bbox) && item.bbox.length === 4;
+    const hasMask = (item) => Array.isArray(item?.mask) && item.mask.length >= 6;
+
+    const TEXT_PREVIEW = 8;        // strings listed before "Show all"
+    const openGroups = new Set();  // object classes the reader has expanded
+    let textAll = false;
+
+    // The model repeats an id for every instance of one thing ("street lamp" × 10).
+    const groupKey = (obj) => `${Number.isInteger(obj?.id) ? obj.id : ''}:${obj?.name || 'object'}`;
+    function groupsOf() {
+      const groups = new Map();
+      objectsOf().forEach((obj, i) => {
+        if (!obj || !passes(obj)) return;
+        const key = groupKey(obj);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(i);
+      });
+      return groups;
+    }
 
     function el(tag, className, text) {
       const node = document.createElement(tag);
@@ -565,12 +658,32 @@
       return p;
     }
 
+    const words = (s) => String(s).replace(/_/g, ' ');
+
     function describeBits(item) {
       const bits = [];
       if (item.position) bits.push(item.position);
       const d = item.description;
       if (d && typeof d === 'object') for (const v of Object.values(d)) if (v && typeof v !== 'object') bits.push(v);
       return bits.join(' · ');
+    }
+
+    let toastTimer = 0;
+    function toast(text) {
+      const node = $('toast');
+      node.textContent = text;
+      node.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => node.classList.remove('show'), 1600);
+    }
+
+    async function copy(text) {
+      try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
+    }
+
+    async function copyText(string) {
+      const short = string.length > 28 ? `${string.slice(0, 27)}…` : string;
+      toast((await copy(string)) ? `Copied “${short}”` : 'Could not copy');
     }
 
     function renderDescription() {
@@ -589,7 +702,7 @@
       const scene = result.scene && typeof result.scene === 'object' ? result.scene : {};
       for (const [k, v] of Object.entries(scene)) {
         if (v == null || v === '') continue;
-        pills.push(pill(k.replace(/_/g, ' '), typeof v === 'object' ? JSON.stringify(v) : v));
+        pills.push(pill(words(k), typeof v === 'object' ? JSON.stringify(v) : v));
       }
       // Regions are named areas without a box: the backdrop the objects sit on.
       for (const r of Array.isArray(result.regions) ? result.regions : []) {
@@ -615,7 +728,7 @@
         if (seen.has(key)) continue;
         seen.add(key);
         const p = el('span', 'pill');
-        p.append(s, el('span', 'p', r.predicate), o);
+        p.append(s, el('span', 'p', words(r.predicate)), o);
         pills.push(p);
       }
       for (const e of Array.isArray(result.events) ? result.events : []) {
@@ -625,59 +738,97 @@
       $('relSec').hidden = !pills.length;
     }
 
-    function countLabel(shown, total) {
-      return shown < total ? `${shown} of ${total}` : String(total);
+    function objectRow(i, inGroup) {
+      const obj = objectsOf()[i];
+      const row = el('button', 'item');
+      row.dataset.kind = 'obj'; row.dataset.i = i;
+      const dot = el('span', 'dot');
+      dot.style.background = colorOf(obj, i);
+      // Inside a group the name is already on the heading row; lead with what tells instances apart.
+      const bits = describeBits(obj);
+      const name = el('span', 'name', inGroup ? (obj.position || obj.name || 'object') : (obj.name || 'object'));
+      const rest = inGroup && obj.position ? bits.split(' · ').slice(1).join(' · ') : bits;
+      if (rest) name.append(el('small', '', rest));
+      row.append(dot, name, el('span', 'score', fmtScore(obj.score)));
+      const li = el('li');
+      li.append(row);
+      return li;
     }
 
     function renderLists() {
       const objects = objectsOf(), texts = textsOf();
 
-      const objRows = [];
-      objects.forEach((obj, i) => {
-        if (!passes(obj)) return;
+      const rows = [];
+      let shown = 0;
+      for (const [key, members] of groupsOf()) {
+        shown += members.length;
+        if (members.length === 1) { rows.push(objectRow(members[0], false)); continue; }
+        const first = objects[members[0]];
+        const open = openGroups.has(key);
         const row = el('button', 'item');
-        row.dataset.kind = 'obj'; row.dataset.i = i;
+        row.dataset.kind = 'group'; row.dataset.key = key;
+        row.setAttribute('aria-expanded', String(open));
         const dot = el('span', 'dot');
-        dot.style.background = colorOf(obj, i);
-        const name = el('span', 'name', obj.name || 'object');
-        const bits = describeBits(obj);
-        if (bits) name.append(el('small', '', bits));
-        row.title = 'Click to pin';
-        row.append(dot, name, el('span', 'score', fmtScore(obj.score)));
-        objRows.push(el('li'));
-        objRows.at(-1).append(row);
-      });
-      $('objList').replaceChildren(...objRows);
-      $('objCount').textContent = objects.length ? countLabel(objRows.length, objects.length) : '';
-      $('objNone').hidden = objects.length > 0;
+        dot.style.background = colorOf(first, members[0]);
+        const name = el('span', 'name', first.name || 'object');
+        name.append(el('small', 'n', `×${members.length}`));
+        const best = Math.max(...members.map((i) => (typeof objects[i].score === 'number' ? objects[i].score : 0)));
+        row.append(dot, name, el('span', 'score', `${best ? `best ${fmtScore(best)} ` : ''}${open ? '▾' : '▸'}`));
+        const li = el('li');
+        li.append(row);
+        if (open) {
+          const sub = el('ul');
+          sub.append(...members.map((i) => objectRow(i, true)));
+          li.append(sub);
+        }
+        rows.push(li);
+      }
+      $('objList').replaceChildren(...rows);
+      $('objCount').textContent = objects.length ? (shown < objects.length ? `${shown} of ${objects.length}` : String(objects.length)) : '';
+      $('objNone').hidden = shown > 0;
+      $('objNone').textContent = objects.length ? 'None at this confidence. Lower the slider to see more.' : 'No objects found.';
 
-      const textRows = [];
-      texts.forEach((t, i) => {
-        if (!passes(t)) return;
+      const visible = texts.map((t, i) => i).filter((i) => passes(texts[i]));
+      const listed = textAll ? visible : visible.slice(0, TEXT_PREVIEW);
+      $('textList').replaceChildren(...listed.map((i) => {
+        const t = texts[i];
         const row = el('button', 'item');
         row.dataset.kind = 'text'; row.dataset.i = i;
-        row.title = 'Click to copy';
+        row.title = 'Copy';
         row.append(el('span', 'dot text'), el('span', 'name', t.string || '(unreadable)'), el('span', 'score', fmtScore(t.score)));
-        textRows.push(el('li'));
-        textRows.at(-1).append(row);
-      });
-      $('textList').replaceChildren(...textRows);
-      $('textCount').textContent = texts.length ? countLabel(textRows.length, texts.length) : '';
-      $('textNone').hidden = texts.length > 0;
+        const li = el('li');
+        li.append(row);
+        return li;
+      }));
+      $('textCount').textContent = texts.length ? (visible.length < texts.length ? `${visible.length} of ${texts.length}` : String(texts.length)) : '';
+      $('textMore').hidden = visible.length <= TEXT_PREVIEW;
+      $('textMore').textContent = textAll ? 'Show fewer' : `Show all ${visible.length}`;
+      $('textNone').hidden = visible.length > 0;
+      $('textNone').textContent = texts.length ? 'None at this confidence.' : 'No text found.';
       syncRows();
     }
 
     function syncRows() {
+      const objects = objectsOf();
+      const hoverKey = hover?.kind === 'group' ? hover.key : hover?.kind === 'obj' ? groupKey(objects[hover.i]) : null;
+      const pinnedKey = pinned >= 0 ? groupKey(objects[pinned]) : null;
       for (const row of document.querySelectorAll('.item')) {
-        const i = Number(row.dataset.i), kind = row.dataset.kind;
-        row.classList.toggle('active', !!hover && hover.kind === kind && hover.i === i);
-        row.classList.toggle('pinned', kind === 'obj' && i === pinned);
-        if (kind === 'obj') row.setAttribute('aria-pressed', String(i === pinned));
+        const kind = row.dataset.kind, i = Number(row.dataset.i);
+        if (kind === 'group') {
+          // A closed group stands in for its members.
+          const closed = !openGroups.has(row.dataset.key);
+          row.classList.toggle('active', row.dataset.key === hoverKey && (hover.kind === 'group' || closed));
+          row.classList.toggle('pinned', closed && row.dataset.key === pinnedKey);
+        } else {
+          row.classList.toggle('active', hover?.kind === kind && hover.i === i);
+          row.classList.toggle('pinned', kind === 'obj' && i === pinned);
+          if (kind === 'obj') row.setAttribute('aria-pressed', String(i === pinned));
+        }
       }
     }
 
     function setHover(next) {
-      if (hover?.kind === next?.kind && hover?.i === next?.i) return;
+      if (hover?.kind === next?.kind && hover?.i === next?.i && hover?.key === next?.key) return;
       hover = next;
       syncRows();
       draw();
@@ -691,35 +842,49 @@
 
     function wireList(list) {
       const target = (e) => e.target.closest('.item');
-      const ref = (row) => ({ kind: row.dataset.kind, i: Number(row.dataset.i) });
-      list.addEventListener('pointerover', (e) => { const row = target(e); if (row) setHover(ref(row)); });
+      const ref = (row) => (row.dataset.kind === 'group' ? { kind: 'group', key: row.dataset.key } : { kind: row.dataset.kind, i: Number(row.dataset.i) });
+      // Touch has no hover; a finger's pointerover would stick after the tap.
+      list.addEventListener('pointerover', (e) => { const row = target(e); if (row && e.pointerType !== 'touch') setHover(ref(row)); });
       list.addEventListener('pointerleave', () => setHover(null));
-      list.addEventListener('focusin', (e) => { const row = target(e); if (row) setHover(ref(row)); });
+      list.addEventListener('focusin', (e) => { const row = target(e); if (row?.matches(':focus-visible')) setHover(ref(row)); });
       list.addEventListener('focusout', () => setHover(null));
-      list.addEventListener('click', async (e) => {
+      list.addEventListener('click', (e) => {
         const row = target(e);
         if (!row) return;
-        const { kind, i } = ref(row);
-        if (kind === 'obj') { togglePin(i); return; }
-        const string = textsOf()[i]?.string;
-        if (!string) return;
-        const score = row.querySelector('.score');
-        const was = score.textContent;
-        score.textContent = (await copy(string)) ? 'copied' : 'copy failed';
-        setTimeout(() => { score.textContent = was; }, 1200);
+        const r = ref(row);
+        if (r.kind === 'obj') {
+          togglePin(r.i);
+          if (pinned === r.i) bringIntoView(viewer);
+        } else if (r.kind === 'group') {
+          if (!openGroups.delete(r.key)) openGroups.add(r.key);
+          renderLists();
+          list.querySelector(`[data-key="${CSS.escape(r.key)}"]`)?.focus({ preventScroll: true });
+        } else {
+          const string = textsOf()[r.i]?.string;
+          if (string) copyText(string);
+        }
       });
     }
     wireList($('objList'));
     wireList($('textList'));
-
-    async function copy(text) {
-      try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
-    }
+    $('textMore').addEventListener('click', () => { textAll = !textAll; renderLists(); });
 
     $('copyJson').addEventListener('click', async () => {
       const btn = $('copyJson');
       btn.textContent = (await copy($('raw').textContent)) ? 'Copied' : 'Copy failed';
       setTimeout(() => { btn.textContent = 'Copy JSON'; }, 1200);
+    });
+
+    $('save').addEventListener('click', () => {
+      if (!image) return;
+      canvas.toBlob((blob) => {
+        if (!blob) { toast('Could not save the image'); return; }
+        const link = el('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `${image.name.replace(/\.[^.]+$/, '') || 'image'}-mirage.jpg`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+      }, 'image/jpeg', 0.92);
     });
 
     function renderResult(json, ms, run) {
@@ -730,13 +895,18 @@
       // Indented, but with each box and outline kept on one line.
       $('raw').textContent = JSON.stringify(result, null, 2)
         .replace(/\[\s*-?[\d.]+(?:,\s*-?[\d.]+)*\s*\]/g, (m) => m.replace(/\s+/g, '').replace(/,/g, ', '));
-      for (const id of ['toolbar', 'runMeta', 'results', 'rawCard']) $(id).hidden = false;
+      for (const id of ['toolbar', 'results', 'rawCard']) $(id).hidden = false;
+      viewer.classList.add('has-result');
+      $('hint').textContent = coarse
+        ? 'Tap an object, here or on the photo, to isolate it. Tap text to copy it.'
+        : 'Hover to highlight. Click an object, here or on the photo, to isolate it; click text to copy it.';
       const total = (performance.now() - run.started) / 1000;
       const no = objectsOf().length, nt = textsOf().length;
       $('runMeta').textContent = `model ${(ms / 1000).toFixed(2)} s on ${run.inputW}×${run.inputH} px`
         + (run.cold ? ` · ${total.toFixed(1)} s with engine and weights load` : '');
       setStatus(`Found ${no} object${no === 1 ? '' : 's'} and ${nt} text string${nt === 1 ? '' : 's'} in ${(ms / 1000).toFixed(1)} s.`, 'ok');
       draw();
+      bringIntoView(viewer);
     }
 
     $('conf').addEventListener('input', () => {
@@ -751,11 +921,6 @@
     for (const t of Object.values(toggles)) t.addEventListener('change', draw);
 
     // ---------------------------------------------------------------- canvas
-
-    const objectsOf = () => (Array.isArray(result?.objects) ? result.objects : []);
-    const textsOf = () => (Array.isArray(result?.text) ? result.text : []);
-    const hasBox = (item) => Array.isArray(item?.bbox) && item.bbox.length === 4;
-    const hasMask = (item) => Array.isArray(item?.mask) && item.mask.length >= 6;
 
     // Model coordinates are 0-1000 on both axes, whatever the image's shape.
     function boxPx(bbox) {
@@ -783,17 +948,30 @@
       return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${alpha})`;
     }
 
-    function drawLabel(text, x, y, h, color, u, above) {
+    // Where a label would go: above its box (below for text), nudged to stay on the canvas.
+    function labelRect(text, x, y, h, u, above) {
       const pad = 4 * u, height = 12 * u + pad * 2;
       const width = ctx.measureText(text).width + pad * 2;
       let ly = above ? y - height : y + h;
       if (ly < 0) ly = y;
       if (ly + height > canvas.height) ly = Math.max(0, y + h - height);
-      const lx = Math.max(0, Math.min(x, canvas.width - width));
+      return { x: Math.max(0, Math.min(x, canvas.width - width)), y: ly, w: width, h: height, pad };
+    }
+
+    function paintLabel(text, r, color, u) {
       ctx.fillStyle = color;
-      ctx.fillRect(lx, ly, width, height);
+      ctx.fillRect(r.x, r.y, r.w, r.h);
       ctx.fillStyle = INK;
-      ctx.fillText(text, lx + pad, ly + pad + 0.5 * u);
+      ctx.fillText(text, r.x + r.pad, r.y + r.pad + 0.5 * u);
+    }
+
+    const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+    function activeObjects() {
+      const objects = objectsOf();
+      if (hover?.kind === 'obj') return new Set([hover.i]);
+      if (hover?.kind === 'group') return new Set(objects.map((o, i) => i).filter((i) => passes(objects[i]) && groupKey(objects[i]) === hover.key));
+      return pinned >= 0 ? new Set([pinned]) : new Set();
     }
 
     function draw() {
@@ -809,12 +987,12 @@
       const u = canvas.width / (canvas.getBoundingClientRect().width || canvas.width);
       const objects = objectsOf(), texts = textsOf();
       const show = Object.fromEntries(Object.entries(toggles).map(([k, t]) => [k, t.checked]));
-      const hoverObj = hover?.kind === 'obj' ? hover.i : -1;
       const hoverText = hover?.kind === 'text' ? hover.i : -1;
-      const active = hoverObj >= 0 ? hoverObj : pinned;
-      const focused = active >= 0 || hoverText >= 0;
+      const active = activeObjects();
+      const focused = active.size > 0 || hoverText >= 0;
 
-      if (show.spot && pinned >= 0 && passes(objects[pinned])) {
+      // A pinned object is isolated: everything outside its outline is dimmed.
+      if (pinned >= 0 && passes(objects[pinned])) {
         const dim = new Path2D();
         dim.rect(0, 0, canvas.width, canvas.height);
         dim.addPath(outline(objects[pinned]));
@@ -826,11 +1004,12 @@
       ctx.textBaseline = 'top';
       ctx.lineJoin = 'round';
 
-      const order = objects.map((_, i) => i).filter((i) => passes(objects[i]) && i !== active);
-      if (active >= 0 && passes(objects[active])) order.push(active); // active one on top
+      const visible = objects.map((_, i) => i).filter((i) => passes(objects[i]));
+      const order = [...visible.filter((i) => !active.has(i)), ...visible.filter((i) => active.has(i))]; // active on top
+      const wanted = [];
 
       for (const i of order) {
-        const obj = objects[i], color = colorOf(obj, i), isActive = i === active;
+        const obj = objects[i], color = colorOf(obj, i), isActive = active.has(i);
         ctx.globalAlpha = focused && !isActive ? 0.3 : 1;
         if ((show.masks || isActive) && hasMask(obj)) {
           const path = outline(obj);
@@ -848,9 +1027,23 @@
           ctx.strokeRect(x, y, w, h);
         }
         if (show.labels || isActive) {
-          const label = (obj.name || 'object') + (isActive && typeof obj.score === 'number' ? ` ${fmtScore(obj.score)}` : '');
-          drawLabel(label, x, y, h, color, u, true);
+          const text = (obj.name || 'object') + (isActive && typeof obj.score === 'number' ? ` ${fmtScore(obj.score)}` : '');
+          wanted.push({ text, color, isActive, score: typeof obj.score === 'number' ? obj.score : 0, rect: labelRect(text, x, y, h, u, true) });
         }
+      }
+
+      // Labels go on last and never on top of each other: active ones first, then
+      // by confidence, and one that would cover an earlier label is left out.
+      // Its box stays, and hovering or tapping it brings the name back.
+      wanted.sort((a, b) => (b.isActive - a.isActive) || (b.score - a.score));
+      const placed = [];
+      for (const label of wanted) {
+        if (!label.isActive && placed.some((p) => overlaps(p.rect, label.rect))) continue;
+        placed.push(label);
+      }
+      for (const label of placed.reverse()) {
+        ctx.globalAlpha = focused && !label.isActive ? 0.3 : 1;
+        paintLabel(label.text, label.rect, label.color, u);
       }
 
       if (show.text || hoverText >= 0) {
@@ -871,7 +1064,10 @@
           ctx.strokeRect(x, y, w, h);
           ctx.setLineDash([]);
           // Strings are only spelled out for the hovered box; a label on each would bury the page.
-          if (isActive && t.string) drawLabel(`“${t.string}” ${fmtScore(t.score)}`.trim(), x, y, h, TEXT_COLOR, u, false);
+          if (isActive && t.string) {
+            const text = `“${t.string}” ${fmtScore(t.score)}`.trim();
+            paintLabel(text, labelRect(text, x, y, h, u, false), TEXT_COLOR, u);
+          }
         });
       }
       ctx.globalAlpha = 1;
@@ -900,13 +1096,24 @@
       if (e.pointerType === 'touch') return; // touch pins on tap instead
       const h = hit(e);
       setHover(h);
-      canvas.style.cursor = h?.kind === 'obj' ? 'pointer' : 'default';
+      canvas.style.cursor = h ? 'pointer' : 'default';
     });
     canvas.addEventListener('pointerleave', () => setHover(null));
     canvas.addEventListener('click', (e) => {
       const h = hit(e);
-      if (h?.kind === 'obj') togglePin(h.i);
-      else if (pinned >= 0) togglePin(pinned);
+      if (h?.kind === 'text') {
+        const string = textsOf()[h.i]?.string;
+        if (string) copyText(string);
+      } else if (h?.kind === 'obj') {
+        togglePin(h.i);
+        // Show the pinned one in the list even if its group was folded.
+        if (pinned === h.i && groupsOf().get(groupKey(objectsOf()[h.i]))?.length > 1) {
+          openGroups.add(groupKey(objectsOf()[h.i]));
+          renderLists();
+        }
+      } else if (pinned >= 0) {
+        togglePin(pinned);
+      }
     });
     // Stroke widths follow the canvas's on-screen size.
     new ResizeObserver(() => draw()).observe(canvas);
