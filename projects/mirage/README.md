@@ -1,6 +1,6 @@
 # mirage
 
-Drop in a photo and see what the [Mirage](https://huggingface.co/Cactus-Compute/mirage) vision model finds in it: a scene summary, named objects with boxes and outlines, readable text, and how the objects relate. Inference runs in the browser through WebAssembly; the image is never uploaded. On phones and tablets a Take photo button opens the camera directly.
+Drop in a photo and see what the [Mirage](https://huggingface.co/Cactus-Compute/mirage) vision model finds in it: a scene summary, named objects with boxes and outlines, readable text, and how the objects relate. Inference runs in the browser through WebAssembly; the image is never uploaded. A Take photo button opens a live camera view in the page (`getUserMedia`), on phones and on desktops with a webcam.
 
 **Live:** [mirage.apps.andymolenda.com](https://mirage.apps.andymolenda.com)
 
