@@ -8,9 +8,9 @@
 export const CATEGORIES = [
   { id: 'flowers',  name: 'Flowers',  many: 'flowers',           blurb: 'Fresh blooms wilt after a few days. The silk one never does.' },
   { id: 'candles',  name: 'Candles',  many: 'candles',           blurb: 'A candle burns for a day and a half. Best seen at night.' },
-  { id: 'wreaths',  name: 'Wreaths',  many: 'wreaths and ribbons', blurb: 'Wreaths and ribbons, in the colors of the cause.' },
+  { id: 'wreaths',  name: 'Wreaths',  many: 'wreaths and ribbons', blurb: 'Wreaths and ribbons, in its colors.' },
   { id: 'notes',    name: 'Notes',    many: 'cards and notes',   blurb: 'A card needs a few words. Pick them below.' },
-  { id: 'mementos', name: 'Mementos', many: 'mementos',          blurb: 'Things it would have recognised.' },
+  { id: 'mementos', name: 'Mementos', many: 'mementos',          blurb: 'Things it would have recognized.' },
   { id: 'trinkets', name: 'Trinkets', many: 'trinkets',          blurb: 'Small things, left the way people leave stones.' },
   { id: 'food',     name: 'Food',     many: 'food and drinks',   blurb: 'Something to share. It kept a lot of mornings company.' },
 ];
@@ -40,7 +40,7 @@ export const KINDS = {
   card:      { c: 'notes', e: '💌', n: 'a card', note: true },
   note:      { c: 'notes', e: '📝', n: 'a handwritten note', note: true },
   letter:    { c: 'notes', e: '✉️', n: 'a sealed letter', note: true },
-  bookmark:  { c: 'notes', e: '🔖', n: 'a bookmark, so it can find its place', note: true },
+  bookmark:  { c: 'notes', e: '🔖', n: 'a bookmark', note: true },
 
   star:      { c: 'mementos', e: '⭐', n: 'a starred item' },
   paper:     { c: 'mementos', e: '📰', n: 'the morning paper' },
@@ -48,9 +48,10 @@ export const KINDS = {
   photo:     { c: 'mementos', e: '📷', n: 'a photo of an old reading list' },
   bear:      { c: 'mementos', e: '🧸', n: 'a stuffed bear' },
   keyboard:  { c: 'mementos', e: '⌨️', n: 'a keyboard with j and k worn smooth' },
+  glasses:   { c: 'mementos', e: '👓', n: 'a pair of reading glasses' },
 
   pebble:    { c: 'trinkets', art: 'pebble', n: 'a painted stone',
-               variants: [['j', 'j'], ['k', 'k'], ['1000+', '1000+'], ['a star', '★'], ['r', 'r'], ['g a', 'g a']], vword: 'says' },
+               variants: [['j', 'j'], ['k', 'k'], ['1000+', '1000+'], ['a star', '★'], ['r', 'r'], ['g a', 'g a'], ['100+', '100+']], vword: 'says' },
   stone:     { c: 'trinkets', e: '🪨', n: 'a plain stone' },
   coin:      { c: 'trinkets', e: '🪙', n: 'a coin' },
   shell:     { c: 'trinkets', e: '🐚', n: 'a shell' },
@@ -60,7 +61,7 @@ export const KINDS = {
   beer:      { c: 'food', e: '🍺', n: 'a beer' },
   whiskey:   { c: 'food', e: '🥃', n: 'a small glass of something strong' },
   sake:      { c: 'food', e: '🍶', n: 'a flask of sake' },
-  orange:    { c: 'food', e: '🍊', n: 'an orange, the right color' },
+  orange:    { c: 'food', e: '🍊', n: 'an orange' },
   cookie:    { c: 'food', e: '🍪', n: 'a cookie' },
   rice:      { c: 'food', e: '🍚', n: 'a bowl of rice' },
 };
@@ -72,7 +73,7 @@ export const PHRASES = [
   '1000+ thanks.',
   'Still starred.',
   'I never did export my starred items.',
-  'The web felt smaller with you.',
+  'The web felt like a neighborhood with you.',
   'You kept me subscribed to my friends.',
   'Mark all as read. Rest now.',
   'I found my favorite blogs through you.',
@@ -84,12 +85,16 @@ export const PHRASES = [
   'You showed me the web was a river.',
   'Pressing r one last time.',
   'Thank you, Reader team.',
-  'Unread count: zero. Finally.',
+  'You always had something new for me.',
   'Long live RSS.',
   'Long live Atom.',
-  'Rest in feeds.',
+  'Rest well, old friend.',
   'I still type your URL sometimes.',
   'Nothing since has felt like home.',
+  'I read more because of you.',
+  'I met people here I still know.',
+  'Sorry about all the unread.',
+  'You let me read at my own pace.',
 ];
 
 export const SIGS = [
@@ -106,6 +111,9 @@ export const SIGS = [
   'a self-hoster',
   'someone who moved to another reader',
   'a passer-by',
+  'someone who signed the petition',
+  'someone who read you at work',
+  'a reader since Labs',
 ];
 
 const clampIndex = (list, i) => (Number.isInteger(i) && i >= 0 && i < list.length ? i : 0);

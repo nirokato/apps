@@ -30,7 +30,7 @@ html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--paper); color: var(--ink); font: 19px/1.55 var(--serif); }
 a { color: var(--blue); }
 button { font: inherit; color: inherit; cursor: pointer; }
-:focus-visible { outline: 2px solid var(--rss); outline-offset: 2px; }
+:focus-visible { outline: 2px solid #fff; outline-offset: 0; box-shadow: 0 0 0 4px #1c1f2b; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* ───────── The scene ───────── */
@@ -50,7 +50,7 @@ body[data-phase="dawn"] {
   --grass1: #4d7d4a; --grass2: #1f4227; --stone-dim: .95; --glow: .5; --stars: .15; --orb: #fff1c9; --orb-glow: rgba(255,225,160,.6);
 }
 body[data-phase="day"] {
-  --sky1: #5da5e3; --sky2: #a9d3f3; --sky3: #e6f2fa; --hill1: #86b481; --hill2: #679c69;
+  --sky1: #7fb0d8; --sky2: #b5d2e6; --sky3: #dfeaf0; --hill1: #9fb7a8; --hill2: #7f9f8e;
   --grass1: #62a052; --grass2: #2c6231; --stone-dim: 1.05; --glow: .22; --stars: 0; --orb: #fff6d6; --orb-glow: rgba(255,244,200,.7);
 }
 body[data-phase="dusk"] {
@@ -72,7 +72,7 @@ body[data-phase="dusk"] .orb, body[data-phase="dawn"] .orb { top: 40%; }
 .ground {
   position: absolute; left: 0; right: 0; bottom: 0; top: 60%;
   background: linear-gradient(var(--grass1), var(--grass2)); transition: background 1.2s;
-  border-radius: 50% 50% 0 0 / 26px 26px 0 0; margin: 0 -4%;
+  border-radius: 50% 50% 0 0 / 26px 26px 0 0; margin: 0 -8%;
 }
 .stone {
   position: absolute; left: 50%; bottom: 35.5%; height: 45%; aspect-ratio: 0.74; translate: -50% 0;
@@ -96,30 +96,30 @@ body[data-phase="dusk"] .orb, body[data-phase="dawn"] .orb { top: 40%; }
   color: #33373d; text-shadow: 0 1px 0 rgba(255,255,255,.4);
 }
 .stone svg { width: 15cqh; height: 15cqh; display: block; margin: 0 auto 3cqh; }
-.stone .memory { font-size: 4.6cqh; font-style: italic; margin: 0 0 1cqh; line-height: 1.1; }
+.stone .memory { font-size: max(11px, 4.6cqh); font-style: italic; margin: 0 0 1cqh; line-height: 1.1; }
 .stone h1 { font: 600 8.2cqh/1.05 var(--serif); letter-spacing: .09em; text-transform: uppercase; margin: 0 0 3.5cqh; }
-.stone .dates { font-size: 4.6cqh; line-height: 1.3; margin: 0 0 3.5cqh; font-variant-numeric: oldstyle-nums; }
+.stone .dates { font-size: max(11px, 4.6cqh); line-height: 1.3; margin: 0 0 3.5cqh; font-variant-numeric: oldstyle-nums; }
 .stone .dates span { display: block; width: 12cqw; height: 1px; margin: 1.6cqh auto 1.4cqh; background: currentColor; opacity: .55; box-shadow: 0 1px 0 rgba(255,255,255,.4); }
-.stone .epi { font-size: 5.4cqh; font-style: italic; margin: 0; line-height: 1.15; }
+.stone .epi { font-size: max(12px, 5.4cqh); font-style: italic; margin: 0; line-height: 1.15; }
 .ninja { position: absolute; left: 50%; bottom: 44%; font: 44px/1 var(--emoji); translate: 40px 60px; opacity: 0; transition: translate .5s cubic-bezier(.3,1.5,.5,1), opacity .2s; }
 .ninja.out { translate: 118px 0; opacity: 1; }
 
 .items { position: absolute; left: 0; right: 0; bottom: 0; top: 60%; z-index: 2; }
 .it {
   position: absolute; translate: -50% -100%; font-size: calc(var(--s) * 30px); line-height: 1;
-  cursor: pointer; transform-origin: 50% 100%; rotate: var(--r, 0deg); filter: drop-shadow(0 1px 1px rgba(0,0,0,.3));
+  cursor: pointer; transform-origin: 50% 100%; rotate: var(--r, 0deg); filter: brightness(calc(.72 + var(--d, 1) * .28)) drop-shadow(0 1px 1px rgba(0,0,0,.3));
   -webkit-tap-highlight-color: transparent;
 }
 .it::after { /* where it touches the grass */
   content: ''; position: absolute; z-index: -1; left: 50%; bottom: -.07em; width: .95em; height: .22em; translate: -50% 0;
   background: radial-gradient(closest-side, rgba(0,0,0,.42), transparent); pointer-events: none;
 }
-.it.mine { filter: drop-shadow(0 1px 1px rgba(0,0,0,.3)) drop-shadow(0 0 5px rgba(255,236,190,.55)); }
+.it.mine::after { background: radial-gradient(closest-side, rgba(0,0,0,.4) 55%, rgba(255,226,150,.95) 62% 78%, transparent 82%); width: 1.25em; height: .34em; bottom: -.12em; }
 .items:empty::after {
   content: 'The grass is bare. Be the first to leave something.'; position: absolute; left: 0; right: 0; top: 46%;
   text-align: center; font-style: italic; color: rgba(255,255,255,.7); padding: 0 1rem;
 }
-.tuft { position: absolute; width: 14px; height: 10px; fill: none; stroke: var(--grass1); stroke-width: 1.6; stroke-linecap: round; filter: brightness(1.4); opacity: .75; transition: stroke 1.2s; }
+.tuft { position: absolute; width: 14px; height: 10px; fill: none; stroke: var(--grass1); stroke-width: 1.6; stroke-linecap: round; filter: brightness(1.15); opacity: .8; transition: stroke 1.2s; }
 .burst { position: absolute; width: 0; height: 0; pointer-events: none; z-index: 2000; }
 .burst b { position: absolute; left: -32px; top: -14px; width: 64px; height: 22px; border-radius: 50%; border: 2px solid rgba(255,255,255,.75); animation: ring .9s ease-out forwards; }
 @keyframes ring { from { transform: scale(.2); opacity: 1; } to { transform: scale(2.3); opacity: 0; } }
@@ -161,7 +161,7 @@ body[data-phase="dusk"] .orb, body[data-phase="dawn"] .orb { top: 40%; }
 }
 .ghost { position: absolute; z-index: 5; pointer-events: none; translate: -50% -100%; font-size: 34px; line-height: 1; opacity: .85; filter: drop-shadow(0 8px 4px rgba(0,0,0,.4)); display: none; }
 .scene.placing .ghost.on { display: block; }
-.scene.placing .items { cursor: copy; outline: 2px dashed rgba(255,255,255,.55); outline-offset: -8px; border-radius: 18px; background: rgba(255,255,255,.06); }
+.scene.placing .items { cursor: copy; background: radial-gradient(ellipse at 50% 55%, rgba(255,222,155,.24), rgba(255,222,155,.07) 60%, transparent 78%); }
 .scene.placing .it { pointer-events: none; }
 
 .fly { position: absolute; z-index: 3; width: 4px; height: 4px; border-radius: 50%; background: #e9ff9a; box-shadow: 0 0 8px 3px rgba(220,255,130,.7); opacity: 0; pointer-events: none; animation: fly 9s ease-in-out infinite; }
@@ -184,13 +184,16 @@ body[data-phase="night"] .fly, body[data-phase="dusk"] .fly { opacity: 1; }
 .phase-btn:hover { background: rgba(10,14,34,.6); }
 
 /* ───────── Action strip ───────── */
-.strip { background: var(--grass2); transition: background 1.2s; color: #f1f3e8; padding: 1rem 1.25rem 1.2rem; text-align: center; position: relative; z-index: 3; }
+.strip { background: var(--grass2); transition: background 1.2s; color: #f1f3e8; padding: 1rem 1.25rem 2.6rem; text-align: center; position: relative; z-index: 3; }
+.strip::after { /* the hill's curve again, in paper */
+  content: ''; position: absolute; left: -6%; right: -6%; bottom: -1px; height: 24px; background: var(--paper); border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+}
 .strip p { margin: .55rem 0 0; font-size: 17px; color: #dfe5d3; }
 .cta {
   border: 0; border-radius: 999px; padding: .7rem 1.6rem; font: 600 21px/1.2 var(--serif);
-  background: var(--rss); color: #fff; box-shadow: 0 2px 0 #a8410e, 0 8px 24px rgba(232,96,28,.3); transition: transform .12s;
+  background: #c44d10; color: #fff; box-shadow: 0 2px 0 #8a3408, 0 8px 24px rgba(232,96,28,.3); transition: transform .12s;
 }
-.cta:hover { transform: translateY(-1px); } .cta:active { transform: translateY(2px); box-shadow: 0 0 0 #a8410e; }
+.cta:hover { transform: translateY(-1px); } .cta:active { transform: translateY(2px); box-shadow: 0 0 0 #8a3408; }
 .ghost-btn { border: 1px solid rgba(255,255,255,.4); background: none; color: inherit; border-radius: 999px; padding: .5rem 1.1rem; font-size: 18px; }
 .ghost-btn:hover { background: rgba(255,255,255,.1); }
 .placing-bar { display: none; gap: .6rem; align-items: center; justify-content: center; flex-wrap: wrap; }
@@ -225,22 +228,23 @@ h3 { font: 600 21px/1.25 var(--serif); margin: 1.6rem 0 .4rem; }
 .gr-open { flex: 1; min-width: 0; display: flex; gap: 10px; align-items: baseline; border: 0; background: none; padding: 6px 9px 6px 0; text-align: left; font: inherit; min-height: 30px; }
 .gr-src { width: 190px; flex: none; color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gr-ttl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.gr-ttl span { color: #777; }
+.gr-ttl span { color: #666; }
 .unread .gr-src, .unread .gr-ttl b { color: #000; font-weight: bold; }
 .gr-ttl b { font-weight: normal; }
-.gr-when { flex: none; color: #777; font-size: 12px; }
+.gr-when { flex: none; color: #666; font-size: 12px; }
 .gr-body { display: none; padding: 4px 14px 16px 34px; gap: 16px; align-items: center; }
 li.open .gr-body { display: flex; }
 .gr-art { font-size: 44px; line-height: 1; flex: none; min-width: 66px; display: flex; justify-content: center; align-items: flex-end; min-height: 60px; }
 .gr-body h4 { font: bold 16px Arial, sans-serif; margin: 0 0 3px; color: var(--blue); }
 .gr-body p { margin: 2px 0; }
 .gr-body q { font: italic 19px/1.3 var(--serif); }
-.gr-body .meta { color: #777; font-size: 12px; }
+.gr-body .meta { color: #666; font-size: 12px; }
 .gr-you { font: 11px Arial, sans-serif; background: #fde9a8; border: 1px solid #e6c34f; border-radius: 3px; padding: 0 4px; margin-left: 6px; color: #5b4a06; font-weight: normal; }
 .gr-body .link + .link { margin-left: 14px; }
 .gr-body .link { border: 0; background: none; padding: 0; color: var(--blue); text-decoration: underline; font: inherit; }
 .gr-empty { padding: 28px 16px; text-align: center; color: #666; background: #fff; }
 .gr-foot { background: var(--gr-chrome); border-top: 1px solid var(--gr-line); padding: 6px 9px; color: #445; display: flex; gap: 10px; justify-content: space-between; flex-wrap: wrap; align-items: center; }
+.gr-foot button { font: inherit; border: 0; background: none; padding: 2px 0; color: #1a3f8f; text-decoration: underline; min-height: 26px; }
 kbd { font: 12px var(--mono); background: #fff; border: 1px solid #b9bfcc; border-bottom-width: 2px; border-radius: 3px; padding: 0 5px; color: #222; white-space: nowrap; }
 
 /* Memorabilia */
@@ -313,7 +317,13 @@ select { font: 17px var(--serif); padding: .4rem .5rem; border: 1px solid var(--
 }
 .toast.on { opacity: 1; translate: -50% 0; }
 
+@media (pointer: coarse) {
+  .gr-star { width: 44px; min-height: 44px; } .gr-open { min-height: 44px; }
+  .gr-bar button, .gr-more, .gr-foot button, .copy { min-height: 44px; padding-left: 12px; padding-right: 12px; }
+  .gr-body .link { min-height: 44px; } .words label { padding-top: .6rem; padding-bottom: .6rem; } .tabs button { min-height: 44px; }
+}
 @media (max-width: 640px) {
+  .tabs { flex-wrap: wrap; } .words { max-height: 42vh; }
   body { font-size: 18px; }
   .scene { height: clamp(460px, 72vh, 600px); }
   .stone { height: 42%; }
@@ -327,6 +337,7 @@ select { font: 17px var(--serif); padding: .4rem .5rem; border: 1px solid var(--
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+  .it.pulse { outline: 2px solid #fff; outline-offset: 5px; border-radius: 10px; }
 }
 </style>
 </head>
@@ -366,11 +377,12 @@ select { font: 17px var(--serif); padding: .4rem .5rem; border: 1px solid var(--
 <div class="strip" id="strip">
   <div class="idle">
     <button class="cta" id="lay" type="button">Lay an offering</button>
-    <p id="tally">Flowers, candles, stones, a cup of coffee. Whatever feels right.</p>
+    <p id="tally">Flowers, candles, stones, a cup of coffee. Bring what you would bring a friend.</p>
   </div>
   <div class="placing-bar">
     <span class="hand" id="hand"></span>
-    <span>Tap the grass where you want to leave it.</span>
+    <span id="place-hint">Tap the grass where you want to leave it.</span>
+    <button class="cta" id="confirm" type="button" hidden>Leave it here</button>
     <button class="ghost-btn" id="auto" type="button">Place it for me</button>
     <button class="ghost-btn" id="cancel" type="button">Cancel</button>
   </div>
@@ -378,7 +390,7 @@ select { font: 17px var(--serif); padding: .4rem .5rem; border: 1px solid var(--
 
 <main>
   <p class="lede">
-    For seven years and nine months it fetched the whole web every morning and handed it over in one quiet list.
+    For nearly seven years and nine months it fetched the whole web every morning and handed it over in one quiet list.
     Then it was retired, and a lot of us never quite found the way back.
     <em>This is a place to leave something for it.</em>
   </p>
@@ -393,8 +405,8 @@ select { font: 17px var(--serif); padding: .4rem .5rem; border: 1px solid var(--
     </div>
     <ol class="gr-list" id="list"></ol>
     <div class="gr-foot">
-      <span><kbd>j</kbd> <kbd>k</kbd> next and previous · <kbd>s</kbd> star · <kbd>?</kbd> all shortcuts</span>
-      <span id="mode"></span>
+      <span><kbd>j</kbd> <kbd>k</kbd> next and previous · <kbd>s</kbd> star · <button type="button" id="helpbtn">all shortcuts</button> · <button type="button" id="keys" aria-pressed="true">Shortcuts: on</button></span>
+      <span id="mode" role="status"></span>
     </div>
   </section>
 
@@ -408,14 +420,14 @@ select { font: 17px var(--serif); padding: .4rem .5rem; border: 1px solid var(--
   <p class="sub">The last one is a small OPML file, the kind Reader handed you on the way out. Any feed reader can import it.</p>
 
   <h2>What it left behind</h2>
-  <p class="sub">Addresses that used to mean something. The struck-through ones answer no more; you can still copy them, for old times' sake.</p>
+  <p class="sub">Addresses that used to mean something. The struck-through ones no longer answer. You can still copy them.</p>
 
   <h3>Where it lived</h3>
   <ul class="relics">
     <li><code class="dead">http://www.google.com/reader/view/</code><button class="copy" type="button">copy</button>
       <p>Home. Most people typed <code>reader.google.com</code> and let it redirect.</p></li>
     <li><code class="dead">http://www.google.com/reader/view/#stream/user%2F-%2Fstate%2Fcom.google%2Freading-list</code><button class="copy" type="button">copy</button>
-      <p>All items. The <code>user/-/</code> part meant "whoever is signed in", which felt like being recognised.</p></li>
+      <p>All items. The <code>user/-/</code> part meant "whoever is signed in", which felt like being recognized.</p></li>
     <li><code class="dead">http://www.google.com/reader/shared/&lt;your-id&gt;</code><button class="copy" type="button">copy</button>
       <p>Your public Shared items page, until October 2011. Small communities formed around these.</p></li>
   </ul>
@@ -454,7 +466,7 @@ select { font: 17px var(--serif); padding: .4rem .5rem; border: 1px solid var(--
         <li><time datetime="2008-06">Jun 2008</time><span>Someone hides a ninja behind the Konami code.</span></li>
         <li><time datetime="2011-10-31">Oct 31, 2011</time><span>Sharing, friends and notes are removed in favor of Google+.</span></li>
         <li><time datetime="2013-03-13">Mar 13, 2013</time><span>"Powering down Google Reader." The web objects, loudly.</span></li>
-        <li><time datetime="2013-07-01">Jul 1, 2013</time><span>Retired. The servers go quiet a little after midnight, Pacific time.</span></li>
+        <li><time datetime="2013-07-01">Jul 1, 2013</time><span>Retired. The servers go quiet a little after midnight that night, Pacific time.</span></li>
         <li><time datetime="2013-07-15">Jul 15, 2013</time><span>Takeout closes. Whatever wasn't exported is gone.</span></li>
       </ul>
     </div>
@@ -479,14 +491,14 @@ select { font: 17px var(--serif); padding: .4rem .5rem; border: 1px solid var(--
   <h2>Survived by</h2>
   <p class="sub" style="max-width:none">
     <a href="https://feedly.com">Feedly</a>, <a href="https://www.inoreader.com">Inoreader</a>, <a href="https://newsblur.com">NewsBlur</a> and
-    <a href="https://theoldreader.com">The Old Reader</a>, who took in the refugees; and by the ones you can run yourself:
-    <a href="https://freshrss.org">FreshRSS</a>, <a href="https://miniflux.app">Miniflux</a> and <a href="https://tt-rss.org">Tiny Tiny RSS</a>.
-    Several of them still speak the "Google Reader API", so that old apps can keep syncing with a service that is no longer there. Also survived by RSS and Atom themselves, which were never the ones in trouble.
+    <a href="https://theoldreader.com">The Old Reader</a>, who took us in; and by the ones you can run yourself:
+    <a href="https://freshrss.org">FreshRSS</a>, <a href="https://miniflux.app">Miniflux</a> and <a href="https://github.com/tt-rss/tt-rss">Tiny Tiny RSS</a> (now a community fork).
+    FreshRSS, Miniflux, Inoreader and The Old Reader still speak the "Google Reader API", so that old apps can keep syncing with a service that is no longer there. Also survived by RSS and Atom themselves, which were never the ones in trouble.
   </p>
 </main>
 
 <footer>
-  <p>A fan memorial. Not affiliated with or endorsed by Google; Google Reader was a product of Google. Offerings are chosen from fixed lists, so nothing typed by visitors is stored, and nothing about you is kept beyond the offering itself.</p>
+  <p>A fan memorial. Not affiliated with or endorsed by Google, which made Google Reader. Offerings are chosen from fixed lists, so nothing typed by visitors is stored, and nothing about you is kept beyond the offering itself.</p>
   <p class="back"><a href="https://apps.andymolenda.com">&larr; apps.andymolenda.com</a></p>
 </footer>
 
@@ -507,7 +519,7 @@ select { font: 17px var(--serif); padding: .4rem .5rem; border: 1px solid var(--
     </div>
     <div class="dlg-foot">
       <div class="preview" id="preview" aria-live="polite">Pick something above.</div>
-      <button class="cta" type="submit" id="carry" disabled>Carry it to the grave</button>
+      <button class="cta" type="submit" id="carry" disabled>Carry it over</button>
     </div>
   </form>
 </dialog>
@@ -563,6 +575,8 @@ const starred = new Set(store.get('starred', []));
 let filter = 'all', selected = null, shown = 60;
 
 const here = location.protocol.startsWith('http') ? location.origin : 'https://reader.apps.andymolenda.com';
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const glide = reduceMotion ? 'auto' : 'smooth';
 const scene = $('#scene'), itemsEl = $('#items'), tip = $('#tip'), listEl = $('#list');
 
 // ── Art ────────────────────────────────────────────────────────────────
@@ -615,7 +629,7 @@ function ago(t) {
 // ── The grass ──────────────────────────────────────────────────────────
 let altarSig = '';
 function renderAltar() {
-  const limit = innerWidth < 640 ? 90 : 170;
+  const limit = innerWidth < 640 ? 60 : 170;
   const visible = items.filter((it) => KINDS[it[2]] && !condition(it).gone).slice(0, limit);
   // Redraw only when something changed, so candles keep flickering and hovers survive the poll.
   const sig = visible.map((it) => { const c = condition(it); return it[0] + (c.wilt ? 'w' : '') + (c.out ? 'o' : ''); }).join();
@@ -626,7 +640,7 @@ function renderAltar() {
     const cls = ['it', c.wilt && 'wilt', c.lit && 'lit', isMine(id) && 'mine', !firstPaint && !seen.has(id) && 'new'].filter(Boolean).join(' ');
     // Things get put down a little crooked. Candles and drinks stay upright.
     const tilt = cat === 'candles' || cat === 'food' ? 0 : [...id].reduce((n, ch) => n + ch.charCodeAt(0), 0) % 15 - 7;
-    return `<span class="${cls}" data-id="${esc(id)}" style="left:${(5 + x / 999 * 90).toFixed(1)}%;top:${(10 + y / 999 * 84).toFixed(1)}%;--s:${(0.75 + y / 999 * 0.6).toFixed(2)};--r:${tilt}deg;z-index:${y}">${art(kind, v, c.out)}</span>`;
+    return `<span class="${cls}" data-id="${esc(id)}" style="left:${(5 + x / 999 * 90).toFixed(1)}%;top:${(10 + y / 999 * 84).toFixed(1)}%;--s:${(0.6 + y / 999 * 0.9).toFixed(2)};--d:${(y / 999).toFixed(2)};--r:${tilt}deg;z-index:${y}">${art(kind, v, c.out)}</span>`;
   }).join('');
   for (const it of visible) seen.add(it[0]);
   firstPaint = false;
@@ -634,7 +648,7 @@ function renderAltar() {
 
 function burst(id) {
   const el = $(`.it[data-id="${CSS.escape(id)}"]`, itemsEl);
-  if (!el || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!el || reduceMotion) return;
   const cat = KINDS[items.find((it) => it[0] === id)?.[2]]?.c;
   const colors = cat === 'flowers' ? ['#ff8fb1', '#ffd166', '#fff'] : cat === 'candles' ? ['#ffd76a', '#ff9a2e'] : ['#fff', '#cfe0ff', '#ffd9a0'];
   const b = document.createElement('span');
@@ -658,19 +672,22 @@ function tipFor(el) {
 }
 const hideTip = () => tip.classList.remove('on');
 
-itemsEl.addEventListener('mouseover', (e) => { const el = e.target.closest('.it'); if (el && !placing) tipFor(el); });
-itemsEl.addEventListener('mouseout', (e) => { if (e.target.closest('.it')) hideTip(); });
-document.addEventListener('click', (e) => { if (!e.target.closest('.it')) hideTip(); });
+// Hover is for mice only: on touch, the mouseout that follows a tap would close the card again.
+itemsEl.addEventListener('pointerover', (e) => { const el = e.target.closest('.it'); if (el && !placing && e.pointerType === 'mouse') tipFor(el); });
+itemsEl.addEventListener('pointerout', (e) => { if (e.pointerType === 'mouse' && e.target.closest('.it')) hideTip(); });
+document.addEventListener('click', (e) => { if (!e.target.closest('#items')) hideTip(); });
 
 // ── The list ───────────────────────────────────────────────────────────
 function visibleList() { return filter === 'star' ? items.filter((it) => starred.has(it[0])) : items; }
 
+let listHtml = null;
 function renderList() {
+  let html;
   const all = visibleList().filter((it) => KINDS[it[2]]);
   if (!all.length) {
-    listEl.innerHTML = `<li class="gr-empty">${filter === 'star' ? 'No starred offerings yet. Press <kbd>s</kbd> on one to keep it close.' : 'Nothing here yet. Yours can be the first.'}</li>`;
+    html = `<li class="gr-empty">${filter === 'star' ? 'No starred offerings yet. Press <kbd>s</kbd> on one to keep it close.' : 'Nothing here yet. Yours can be the first.'}</li>`;
   } else {
-    listEl.innerHTML = all.slice(0, shown).map((it) => {
+    html = all.slice(0, shown).map((it) => {
       const [id, t, kind, v, p, s] = it, c = condition(it);
       const cls = [!read.has(id) && 'unread', id === selected && 'sel', id === selected && openId === id && 'open'].filter(Boolean).join(' ');
       const title = capitalize(describe(kind, v)), words = p >= 0 && PHRASES[p] ? PHRASES[p] : '';
@@ -694,6 +711,16 @@ function renderList() {
       </li>`;
     }).join('') + (all.length > shown ? `<li class="gr-empty"><button class="gr-more" type="button" id="more">Show older offerings</button></li>` : '');
   }
+  if (html !== listHtml) {
+    // Rebuilding the rows must not drop keyboard focus.
+    const a = document.activeElement, li = a && a.closest ? a.closest('#list li[data-id]') : null;
+    const where = li && { id: li.dataset.id, sel: a.hasAttribute('data-link') ? '[data-link]' : a.hasAttribute('data-find') ? '[data-find]' : a.classList.contains('gr-star') ? '.gr-star' : '.gr-open' };
+    listEl.innerHTML = listHtml = html;
+    if (where) {
+      const row = $(`li[data-id="${CSS.escape(where.id)}"]`, listEl);
+      (row?.querySelector(where.sel) || row?.querySelector('.gr-open'))?.focus({ preventScroll: true });
+    }
+  }
   const unread = items.filter((it) => !read.has(it[0])).length;
   $('#unread').textContent = unread ? `(${unread > 1000 ? '1000+' : unread})` : '';
   document.title = (unread ? `(${unread > 1000 ? '1000+' : unread}) ` : '') + BASE_TITLE;
@@ -703,8 +730,9 @@ function renderList() {
 let openId = null;
 
 function saveSets() {
+  // Prune ids the altar has dropped, but only when we can actually see the altar.
   const live = new Set(items.map((it) => it[0]));
-  store.set('read', [...read].filter((id) => live.has(id)));
+  store.set('read', online ? [...read].filter((id) => live.has(id)) : [...read]);
   store.set('starred', [...starred]);
 }
 function select(id, open) {
@@ -735,8 +763,9 @@ function markAll() {
 function findOnGrass(id) {
   const el = $(`.it[data-id="${CSS.escape(id)}"]`, itemsEl);
   if (!el) return toast('The grass has been tidied since, but it stays in the feed.');
-  scene.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  scene.scrollIntoView({ behavior: glide, block: 'start' });
   el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
+  setTimeout(() => el.classList.remove('pulse'), 3500);
   setTimeout(() => tipFor(el), 500);
 }
 
@@ -764,7 +793,7 @@ function renderTally() {
   const parts = CATEGORIES.filter((c) => counts[c.id]).map((c) => `${c.name} ${counts[c.id].toLocaleString()}`);
   $('#tally').textContent = total
     ? `${total.toLocaleString()} offering${total === 1 ? '' : 's'} so far. ${parts.join(' · ')}${anniversary()}`
-    : 'Nothing on the grass yet. Flowers, candles, stones, a cup of coffee: whatever feels right.';
+    : 'Nothing on the grass yet. Bring what you would bring a friend.';
   $('#mode').textContent = online ? '' : 'Shared altar unreachable: showing what this browser has laid.';
 }
 
@@ -813,12 +842,20 @@ async function lay(o) {
     items = merge(items.filter((it) => !mine.some((m) => m[0] === it[0])));
     return tuple[0];
   };
-  let id, message = 'Laid with care. It is in the feed now, too.';
+  const cat = KINDS[o.kind].c, burnsOut = new Date(Date.now() + BURN_FOR * 1000), h = burnsOut.getHours();
+  let id, message = KINDS[o.kind].burns
+    ? `Lit. It will burn until ${burnsOut.toLocaleDateString([], { weekday: 'long' })} ${h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'}.`
+    : KINDS[o.kind].fresh ? 'Laid with care. It will stay fresh for five days.'
+    : cat === 'food' ? 'Set down with care. It is in the feed now, too.' : 'Laid with care. It is in the feed now, too.';
   try {
     if (!online) throw new Error('offline');
     const res = await fetch('/api/altar', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(o) });
     const data = await res.json();
-    if (res.status === 429 && data.error === 'slow') return toast('Gently. Give it a minute before the next one.');
+    if (res.status === 429 && data.error === 'slow') {     // keep it in hand for another try
+      Object.assign(choice, { kind: o.kind, variant: o.variant, phrase: o.phrase, sig: o.sig });
+      startPlacing();
+      return toast('Gently. Give it a minute, then set it down.');
+    }
     if (!res.ok) throw new Error(data.error || 'failed');
     id = data.id;
     mine.push(data.items.find((it) => it[0] === id)); store.set('mine', mine.slice(-200));
@@ -831,8 +868,11 @@ async function lay(o) {
   }
   read.add(id); saveSets();
   known?.add(id);
+  choice.kind = null;
   paint();
   burst(id);
+  const laid = $(`.it[data-id="${CSS.escape(id)}"]`, itemsEl);   // show them which one is theirs
+  if (laid) { tipFor(laid); setTimeout(hideTip, 4500); }
   toast(message);
 }
 
@@ -865,9 +905,12 @@ function renderPreview() {
 $('#sig').innerHTML = SIGS.map((s, i) => `<option value="${i}">${esc(s)}</option>`).join('');
 $('#sig').value = choice.sig = Math.min(choice.sig, SIGS.length - 1);
 $('#sig').onchange = (e) => { choice.sig = +e.target.value; store.set('sig', choice.sig); renderPreview(); };
-$('#tabs').onclick = (e) => { const b = e.target.closest('[data-cat]'); if (b) { choice.cat = b.dataset.cat; renderPicker(); } };
-$('#kinds').onclick = (e) => { const b = e.target.closest('[data-kind]'); if (b) { choice.kind = b.dataset.kind; choice.variant = 0; renderPicker(); } };
-$('#variants').onclick = (e) => { const b = e.target.closest('[data-variant]'); if (b) { choice.variant = +b.dataset.variant; renderPicker(); } };
+// renderPicker rebuilds the buttons, so put focus back on the one that was pressed.
+const repick = (sel) => { renderPicker(); $(sel, picker)?.focus(); };
+$('#tabs').onclick = (e) => { const b = e.target.closest('[data-cat]'); if (b) { if (b.dataset.cat !== choice.cat) choice.kind = null; choice.cat = b.dataset.cat; repick(`[data-cat="${choice.cat}"]`); } };
+$('#kinds').onclick = (e) => { const b = e.target.closest('[data-kind]'); if (b) { choice.kind = b.dataset.kind; choice.variant = 0; repick(`[data-kind="${choice.kind}"]`); } };
+$('#variants').onclick = (e) => { const b = e.target.closest('[data-variant]'); if (b) { choice.variant = +b.dataset.variant; repick(`[data-variant="${choice.variant}"]`); } };
+picker.addEventListener('close', () => { if (placing) $('#auto').focus({ preventScroll: true }); });
 $('#words').onchange = (e) => { choice.phrase = +e.target.value; renderPreview(); };
 $('#lay').onclick = openPicker;
 function openPicker() { if (placing) return; renderPicker(); picker.showModal(); }
@@ -877,39 +920,53 @@ for (const d of document.querySelectorAll('dialog')) {
 }
 
 // ── Placing ────────────────────────────────────────────────────────────
-let placing = null;
+let placing = null, pending = null, lastPointer = 'mouse';
 const ghost = $('#ghost');
 function startPlacing() {
   placing = { kind: choice.kind, variant: choice.variant, phrase: choice.phrase, sig: choice.sig };
+  pending = null;
   const html = art(placing.kind, placing.variant);
   ghost.innerHTML = html; $('#hand').innerHTML = html;
+  $('#confirm').hidden = true; $('#place-hint').textContent = 'Tap the grass where you want to leave it.';
   scene.classList.add('placing'); $('#strip').classList.add('placing');
   hideTip();
-  scene.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  $('#auto').focus({ preventScroll: true });
+  scene.scrollIntoView({ behavior: glide, block: 'end' });
+  if (!picker.open) $('#auto').focus({ preventScroll: true });
 }
 function stopPlacing() {
-  placing = null;
+  const had = !!placing;
+  placing = pending = null;
   scene.classList.remove('placing'); $('#strip').classList.remove('placing'); ghost.classList.remove('on');
+  if (had) $('#lay').focus({ preventScroll: true });
 }
 function placeAt(x, y) {
   const o = { ...placing, x: Math.round(Math.max(0, Math.min(999, x))), y: Math.round(Math.max(0, Math.min(999, y))) };
   stopPlacing();
   if (validOffering(o)) lay(o);
-  choice.kind = null;
 }
-itemsEl.addEventListener('pointermove', (e) => {
-  if (!placing || e.pointerType === 'touch') return;
-  const b = scene.getBoundingClientRect();
-  ghost.style.left = e.clientX - b.left + 'px'; ghost.style.top = e.clientY - b.top + 'px';
-  ghost.classList.add('on');
-});
-itemsEl.addEventListener('pointerleave', () => ghost.classList.remove('on'));
+const moveGhost = (e) => { const b = scene.getBoundingClientRect(); ghost.style.left = e.clientX - b.left + 'px'; ghost.style.top = e.clientY - b.top + 'px'; ghost.classList.add('on'); };
+itemsEl.addEventListener('pointerdown', (e) => { lastPointer = e.pointerType || 'mouse'; });
+itemsEl.addEventListener('pointermove', (e) => { if (placing && e.pointerType === 'mouse') moveGhost(e); });
+itemsEl.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') ghost.classList.remove('on'); });
+let stackKey = '', stackAt = 0;
 itemsEl.addEventListener('click', (e) => {
-  if (!placing) { const el = e.target.closest('.it'); if (el) tipFor(el); return; }
+  if (!placing) {
+    // Offerings overlap, so repeat taps on one spot walk down through the pile.
+    const stack = [...new Set(document.elementsFromPoint(e.clientX, e.clientY).map((n) => n.closest('.it')).filter(Boolean))];
+    if (!stack.length) return;
+    const key = stack.map((n) => n.dataset.id).join();
+    stackAt = key === stackKey ? (stackAt + 1) % stack.length : 0;
+    stackKey = key;
+    return tipFor(stack[stackAt]);
+  }
   const r = itemsEl.getBoundingClientRect();
-  placeAt(((e.clientX - r.left) / r.width * 100 - 5) / 90 * 999, ((e.clientY - r.top) / r.height * 100 - 10) / 84 * 999);
+  const spot = { x: ((e.clientX - r.left) / r.width * 100 - 5) / 90 * 999, y: ((e.clientY - r.top) / r.height * 100 - 10) / 84 * 999 };
+  if (lastPointer === 'mouse') return placeAt(spot.x, spot.y);
+  // Touch has no hover preview and the altar is shared, so the first tap only sets it down to look.
+  pending = spot; moveGhost(e);
+  $('#confirm').hidden = false; $('#place-hint').textContent = 'There? Tap elsewhere to move it.';
 });
+$('#confirm').onclick = () => placing && pending && placeAt(pending.x, pending.y);
 $('#auto').onclick = () => placing && placeAt(Math.random() * 999, 120 + Math.random() ** 1.4 * 860);
 $('#cancel').onclick = stopPlacing;
 
@@ -969,18 +1026,24 @@ function toast(msg) {
 // ── Keyboard ───────────────────────────────────────────────────────────
 const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
 let konami = 0, gPending = 0;
+let keysOn = store.get('keys', true);
+const showKeys = () => { $('#keys').textContent = `Shortcuts: ${keysOn ? 'on' : 'off'}`; $('#keys').setAttribute('aria-pressed', keysOn); };
+showKeys();
+$('#keys').onclick = () => { keysOn = !keysOn; store.set('keys', keysOn); showKeys(); };
+$('#helpbtn').onclick = () => $('#help').showModal();
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && placing) return stopPlacing();
-  if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector('dialog[open]')) return;
+  if (!keysOn || placing || e.ctrlKey || e.metaKey || e.altKey || document.querySelector('dialog[open]')) return;
   if (e.target.closest('input, select, textarea')) return;
 
   konami = e.key === KONAMI[konami] ? konami + 1 : e.key === KONAMI[0] ? 1 : 0;
   if (konami === KONAMI.length) {
     konami = 0;
     $('#ninja').classList.toggle('out');
-    scene.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    scene.scrollIntoView({ behavior: glide, block: 'start' });
     return toast('Ninja mode. Just like June 2008.');
   }
+  if (konami > 1 && e.key.startsWith('Arrow')) e.preventDefault();   // do not scroll the page mid-code
   if (konami > 8) return;      // the b in ↑↑↓↓←→←→ba is not a shortcut
 
   const g = Date.now() - gPending < 1200;

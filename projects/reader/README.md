@@ -20,7 +20,8 @@ Not affiliated with Google.
 - **Without the API** (plain static server, or KV not bound yet) the page still works: offerings stay in the visitor's browser and the list says so.
 - **Aging:** fresh flowers wilt after 5 days and are cleared from the grass after 30. Candles burn for 36 hours, then sit as stubs for 14 days. Everything else stays until it falls out of the newest 500. The feeds and the list are not affected.
 - **Sky** follows the visitor's clock (dawn, day, dusk, night); the button in the corner cycles it.
-- **Keyboard:** Reader's shortcuts work on the list (`j k n p o s m Shift+a v r`, `g a`, `g s`, `?`), and the Konami code does what it did in June 2008.
+- **Touch:** the first tap on the grass only sets the offering down to look; "Leave it here" commits it. Mouse users get a hover preview and place with one click. Repeat taps on one spot walk down through overlapping offerings.
+- **Keyboard:** Reader's shortcuts work on the list (`j k n p o s m Shift+a v r`, `g a`, `g s`, `?`), and the Konami code does what it did in June 2008. The list footer has a switch to turn the single-key shortcuts off.
 
 ## Local development
 
