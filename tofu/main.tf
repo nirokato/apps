@@ -25,6 +25,26 @@ resource "cloudflare_pages_project" "project" {
   account_id        = var.cloudflare_account_id
   name              = each.value.pages_name
   production_branch = "main"
+
+  # Only projects in var.kv_projects get a deployment config; the rest stay as they were.
+  dynamic "deployment_configs" {
+    for_each = contains(var.kv_projects, each.key) ? [each.key] : []
+    content {
+      production {
+        kv_namespaces = { KV = cloudflare_workers_kv_namespace.project[deployment_configs.value].id }
+      }
+      preview {
+        kv_namespaces = { KV = cloudflare_workers_kv_namespace.project[deployment_configs.value].id }
+      }
+    }
+  }
+}
+
+resource "cloudflare_workers_kv_namespace" "project" {
+  for_each = var.kv_projects
+
+  account_id = var.cloudflare_account_id
+  title      = "andy-apps-${each.key}"
 }
 
 resource "cloudflare_pages_domain" "domain" {

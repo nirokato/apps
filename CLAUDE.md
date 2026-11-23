@@ -19,6 +19,7 @@ projects/
   bubble-share/          Interactive showcase of Bubble Share (FOSS Wi-Fi Aware sharing for Android)
   github-uptime/         GitHub's monthly uptime history, charted from githubstatus.com
   mirage/                In-browser image description (objects, text, scene) with the Mirage vision model
+  reader/                Memorial for Google Reader with a shared altar of offerings (Pages worker + KV)
 tofu/                    OpenTofu infrastructure (Cloudflare Pages + DNS)
 tools/
   trove-ingest/          Node script: Printables metadata -> trove index.json
@@ -53,6 +54,7 @@ The deploy matrix is auto-discovered from the `projects/` directory — **no wor
 | bubble-share | `projects/bubble-share/` | `bubble-share.apps.andymolenda.com` | Interactive showcase of [Bubble Share](https://codeberg.org/s1m/bubble-share), a FOSS Wi-Fi Aware file/clipboard sharing app for Android: two-phone simulator plus key-schedule, wire-format and NFC labs |
 | github-uptime | `projects/github-uptime/` | `github-uptime.apps.andymolenda.com` | GitHub's monthly uptime since 2017, charted from its status page |
 | mirage | `projects/mirage/` | `mirage.apps.andymolenda.com` | Drop in a photo; the Mirage vision model describes it (objects, text, scene, relations) in the browser via WebAssembly |
+| reader | `projects/reader/` | `reader.apps.andymolenda.com` | A headstone for Google Reader where visitors lay flowers, candles and other offerings on a shared altar; the offerings have Atom and RSS feeds |
 
 ## Project classes
 
@@ -129,11 +131,14 @@ For a *just for fun* project, tag the name: `<div class="project-name"><name><sp
 
 - **Exception: mirage** is our own take on [joemaddalone/mirage-demo](https://github.com/joemaddalone/mirage-demo). That repo carries no license, so nothing is copied from it; the page and worker are written from scratch against Cactus's C API (`cactus.h`). Its container is 900px wide for the photo. `vendor/` holds Cactus Compute's prebuilt WebAssembly runtime (`cactus.js` + `cactus.wasm`, Apache-2.0, license in `vendor/LICENSE.txt`), copied unmodified from `huggingface.co/Cactus-Compute/cactus` under `releases/<version>/wasm/`; check new copies against that release's `manifest.json`. The weights (`mirage.cact`, 21.6 MB, Apache-2.0) are not committed: `worker.js` fetches them from Hugging Face at a pinned commit, checks their SHA-256, and keeps them in Cache Storage. To move to new weights, change `url`, `size` and `sha256` in `worker.js` together. Inference runs in a Web Worker (`worker.js`), which is why the project is two files and not one. No automated tests; to check a change, serve the directory and describe an image.
 
+- **Exception: reader** has its own look (night-sky scene, serif type, an old-Reader-style list), not the design system above; it keeps the title format and the back link. It is also the one project with a backend: `_worker.js` (Cloudflare Pages advanced mode, picked up from the deploy directory with no workflow change) serves `/api/altar`, `/feed.atom` and `/feed.rss`, and stores the altar as one JSON value in a Workers KV namespace bound as `KV`. Visitors never type text: offerings are ids and indexes into `catalog.js`, which the page and the worker both import, and whose lists are append-only. The page falls back to `localStorage` when the API is missing. Test with `npx wrangler pages dev projects/reader --kv KV`. See `projects/reader/README.md`.
+
 ## Deployment
 
 - **Platform:** Cloudflare Pages (one Pages project per project)
 - **Infrastructure:** OpenTofu manages Pages projects, custom domains, and DNS CNAMEs. State in Cloudflare R2 (`tofu-state` bucket, key `apps/`).
 - **Workflow:** `.github/workflows/deploy.yml` — tofu plan on PR (with comment), tofu apply + deploy on push to `main`.
+- **KV for Pages workers:** projects listed in `kv_projects` in `tofu/variables.tf` (currently `reader`) get a Workers KV namespace `andy-apps-<name>`, bound to their Pages project as `KV` for production and preview. The Cloudflare API token therefore also needs Account: Workers KV Storage: Edit.
 - **Auto-discovery:** The deploy job scans `projects/` at runtime to build its matrix. No manual matrix updates needed.
 - **Trove index refresh:** `.github/workflows/trove-refresh.yml` rebuilds `projects/trove/data/index.json` from the Printables API (weekly + manual dispatch) and commits to `main`, re-triggering trove's deploy. The deployed app is fully static; the ingest never runs in users' browsers.
 - **github-uptime refresh:** `.github/workflows/github-uptime-refresh.yml` re-scrapes on the 2nd of each month (~9 min, paced requests), commits only when the data changed, and deploys github-uptime itself with wrangler. Pushes made with `GITHUB_TOKEN` don't start other workflows, so `deploy.yml` never sees a bot commit; any scheduled refresh that should go live has to deploy on its own.
