@@ -118,7 +118,7 @@ export function describe(kindId, variant) {
   const label = k.variants[clampIndex(k.variants, variant)][0];
   if (k.vword === 'ribbon') return `${k.n} with a ${label} ribbon`;
   if (k.vword === 'says') return `${k.n} that says “${label}”`;
-  return k.n.replace(/^(an?) /, (_, a) => `${/^[aeiou]/i.test(label) ? 'an' : 'a'} ${label} `);
+  return k.n.replace(/^(an?) /, (_, a) => `${/^([aeiou]|RSS)/i.test(label) ? 'an' : 'a'} ${label} `);
 }
 
 export const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
