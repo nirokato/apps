@@ -10,6 +10,7 @@ Not affiliated with Google.
 |------|------------|
 | `index.html` | The page: scene, picker, Reader-style list of offerings, memorabilia |
 | `catalog.js` | Every kind of offering, every phrase and every signature. Imported by the page and the worker |
+| `art.js` | The offerings as one flat SVG set (48x48, drawn by hand in code), so the altar looks the same on every platform. Candles, wreaths, ribbons and painted stones are drawn in `index.html` |
 | `_worker.js` | Pages worker (advanced mode): `/api/altar`, `/feed.atom`, `/feed.rss`, static assets for the rest |
 
 ## How it works
