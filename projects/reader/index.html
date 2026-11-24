@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>reader — apps.andymolenda.com</title>
+<meta name="description" content="A small grave for Google Reader (2005 to 2013). Lay a flower, light a candle, leave a painted stone. The offerings have their own Atom and RSS feeds, naturally.">
+<meta name="theme-color" content="#0b1026">
+<link rel="alternate" type="application/atom+xml" title="Offerings for Google Reader (Atom)" href="/feed.atom">
+<link rel="alternate" type="application/rss+xml" title="Offerings for Google Reader (RSS)" href="/feed.rss">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #f4f1ea;
+  --ink: #24262b;
+  --ink-soft: #5d6068;
+  --rule: #ddd8cc;
+  --rss: #e8601c;
+  --blue: #2a5db0;
+  --gr-chrome: #e1ecfe;
+  --gr-line: #c2cff1;
+  --serif: 'EB Garamond', Georgia, 'Times New Roman', serif;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  --emoji: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 19px/1.55 var(--serif); }
+a { color: var(--blue); }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid #fff; outline-offset: 0; box-shadow: 0 0 0 4px #1c1f2b; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ───────── The scene ───────── */
+body {
+  --sky1: #0b1026; --sky2: #1b2350; --sky3: #3a3566;
+  --hill1: #141a35; --hill2: #0f152b;
+  --grass1: #17331f; --grass2: #0b1a12;
+  --stone-dim: .72; --glow: .95; --stars: 1; --orb: #f3efd9; --orb-glow: rgba(243,239,217,.35);
+}
+.scene {
+  position: relative; overflow: hidden; height: clamp(480px, 78vh, 700px);
+  background: linear-gradient(var(--sky1), var(--sky2) 38%, var(--sky3) 62%);
+  user-select: none; -webkit-user-select: none;
+}
+body[data-phase="dawn"] {
+  --sky1: #5a6aa8; --sky2: #e9a9a0; --sky3: #fbd9a5; --hill1: #6f7f96; --hill2: #586a7e;
+  --grass1: #4d7d4a; --grass2: #1f4227; --stone-dim: .95; --glow: .5; --stars: .15; --orb: #fff1c9; --orb-glow: rgba(255,225,160,.6);
+}
+body[data-phase="day"] {
+  --sky1: #7fb0d8; --sky2: #b5d2e6; --sky3: #dfeaf0; --hill1: #9fb7a8; --hill2: #7f9f8e;
+  --grass1: #62a052; --grass2: #2c6231; --stone-dim: 1.05; --glow: .22; --stars: 0; --orb: #fff6d6; --orb-glow: rgba(255,244,200,.7);
+}
+body[data-phase="dusk"] {
+  --sky1: #2b2a5a; --sky2: #b0597a; --sky3: #f2a65a; --hill1: #453360; --hill2: #2f264c;
+  --grass1: #33502f; --grass2: #13241a; --stone-dim: .85; --glow: .7; --stars: .5; --orb: #ffd9a0; --orb-glow: rgba(255,170,90,.6);
+}
+.stars { position: absolute; inset: 0 0 40% 0; opacity: var(--stars); transition: opacity 1.2s; }
+.stars i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff; animation: twinkle 4s ease-in-out infinite; }
+@keyframes twinkle { 50% { opacity: .25; } }
+.orb {
+  position: absolute; top: 12%; right: 14%; width: 54px; height: 54px; border-radius: 50%;
+  background: var(--orb); box-shadow: 0 0 50px 18px var(--orb-glow); transition: background 1.2s, box-shadow 1.2s, top 1.2s;
+}
+body[data-phase="night"] .orb { box-shadow: 0 0 40px 10px var(--orb-glow), inset -12px -6px 0 0 rgba(20,26,53,.28); }
+body[data-phase="dusk"] .orb, body[data-phase="dawn"] .orb { top: 40%; }
+.hills { position: absolute; left: 0; right: 0; bottom: 38%; width: 100%; height: 22%; display: block; }
+.hills path:first-child { fill: var(--hill1); } .hills path:last-child { fill: var(--hill2); }
+.hills path { transition: fill 1.2s; }
+.ground {
+  position: absolute; left: 0; right: 0; bottom: 0; top: 60%;
+  background: linear-gradient(var(--grass1), var(--grass2)); transition: background 1.2s;
+  border-radius: 50% 50% 0 0 / 26px 26px 0 0; margin: 0 -8%;
+}
+.stone {
+  position: absolute; left: 50%; bottom: 35.5%; height: 45%; aspect-ratio: 0.74; translate: -50% 0;
+  container-type: size; filter: brightness(var(--stone-dim)); transition: filter 1.2s;
+}
+.stone::before { /* the shadow it throws on the grass */
+  content: ''; position: absolute; left: -32%; right: -32%; bottom: -12%; height: 17%;
+  background: radial-gradient(closest-side, rgba(0,0,0,.42), transparent);
+}
+.stone::after { /* plinth */
+  content: ''; position: absolute; left: -9%; right: -9%; bottom: -5%; height: 9%;
+  background: linear-gradient(#8b8f95, #63676d); border-radius: 3px; box-shadow: 0 10px 18px rgba(0,0,0,.35);
+}
+.stone-face {
+  position: absolute; inset: 0; z-index: 1; padding: 13cqh 8cqw 6cqh; text-align: center;
+  border-radius: 50% 50% 3px 3px / 30% 30% 2px 2px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='3' seed='4'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .55 -.12'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    linear-gradient(155deg, #c3c6ca, #999da3 55%, #7b7f86);
+  box-shadow: inset 0 3px 0 rgba(255,255,255,.35), inset -8px 0 14px rgba(0,0,0,.18), inset 8px 0 14px rgba(255,255,255,.08);
+  color: #33373d; text-shadow: 0 1px 0 rgba(255,255,255,.4);
+}
+.stone svg { width: 15cqh; height: 15cqh; display: block; margin: 0 auto 3cqh; }
+.stone .memory { font-size: max(11px, 4.6cqh); font-style: italic; margin: 0 0 1cqh; line-height: 1.1; }
+.stone h1 { font: 600 8.2cqh/1.05 var(--serif); letter-spacing: .09em; text-transform: uppercase; margin: 0 0 3.5cqh; }
+.stone .dates { font-size: max(11px, 4.6cqh); line-height: 1.3; margin: 0 0 3.5cqh; font-variant-numeric: oldstyle-nums; }
+.stone .dates span { display: block; width: 12cqw; height: 1px; margin: 1.6cqh auto 1.4cqh; background: currentColor; opacity: .55; box-shadow: 0 1px 0 rgba(255,255,255,.4); }
+.stone .epi { font-size: max(12px, 5.4cqh); font-style: italic; margin: 0; line-height: 1.15; }
+.ninja { position: absolute; left: 50%; bottom: 44%; font: 44px/1 var(--emoji); translate: 40px 60px; opacity: 0; transition: translate .5s cubic-bezier(.3,1.5,.5,1), opacity .2s; }
+.ninja.out { translate: 118px 0; opacity: 1; }
+
+.items { position: absolute; left: 0; right: 0; bottom: 0; top: 60%; z-index: 2; }
+.it {
+  position: absolute; translate: -50% -100%; font-size: calc(var(--s) * 34px); line-height: 1;
+  cursor: pointer; transform-origin: 50% 100%; rotate: var(--r, 0deg); filter: brightness(calc(.72 + var(--d, 1) * .28)) drop-shadow(0 1px 1px rgba(0,0,0,.3));
+  -webkit-tap-highlight-color: transparent;
+}
+.it::after { /* where it touches the grass */
+  content: ''; position: absolute; z-index: -1; left: 50%; bottom: -.07em; width: .95em; height: .22em; translate: -50% 0;
+  background: radial-gradient(closest-side, rgba(0,0,0,.42), transparent); pointer-events: none;
+}
+.it.mine::after { background: radial-gradient(closest-side, rgba(0,0,0,.4) 55%, rgba(255,226,150,.95) 62% 78%, transparent 82%); width: 1.25em; height: .34em; bottom: -.12em; }
+.items:empty::after {
+  content: 'The grass is bare. Be the first to leave something.'; position: absolute; left: 0; right: 0; top: 46%;
+  text-align: center; font-style: italic; color: rgba(255,255,255,.7); padding: 0 1rem;
+}
+.tuft { position: absolute; width: 14px; height: 10px; fill: none; stroke: var(--grass1); stroke-width: 1.6; stroke-linecap: round; filter: brightness(1.15); opacity: .8; transition: stroke 1.2s; }
+.burst { position: absolute; width: 0; height: 0; pointer-events: none; z-index: 2000; }
+.burst b { position: absolute; left: -32px; top: -14px; width: 64px; height: 22px; border-radius: 50%; border: 2px solid rgba(255,255,255,.75); animation: ring .9s ease-out forwards; }
+@keyframes ring { from { transform: scale(.2); opacity: 1; } to { transform: scale(2.3); opacity: 0; } }
+.burst i { position: absolute; left: -4px; top: -22px; width: 8px; height: 8px; border-radius: 70% 0 70% 0; background: var(--c); animation: petal 1.2s ease-out forwards; }
+@keyframes petal { from { transform: rotate(var(--a)) translateY(0) scale(1); opacity: 1; } to { transform: rotate(var(--a)) translateY(-64px) rotate(120deg) scale(.4); opacity: 0; } }
+.it.new { animation: drop .7s cubic-bezier(.3,1.4,.5,1) both; }
+@keyframes drop { from { transform: translateY(-90px) scale(.6); opacity: 0; } }
+.it.pulse { animation: pulse 1.1s ease-in-out 3; }
+@keyframes pulse { 50% { transform: scale(1.5); } }
+.it.wilt .ob, .it.wilt .em { filter: sepia(.75) saturate(.45) brightness(.72); rotate: 24deg; transform-origin: 50% 100%; }
+.it.lit::before {
+  content: ''; position: absolute; left: 50%; top: -10%; width: 4.4em; height: 4.4em; translate: -50% -50%; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(255,200,110,.5), rgba(255,170,70,.16) 55%, transparent);
+  opacity: var(--glow); mix-blend-mode: screen; transition: opacity 1.2s;
+}
+.em { font-family: var(--emoji); }
+.ob { width: 1.2em; height: 1.2em; display: block; overflow: visible; }
+.candle {
+  --wax: #f1e7cd; display: inline-block; position: relative; width: .3em; height: .82em; vertical-align: bottom;
+  background: linear-gradient(90deg, rgba(0,0,0,.22), transparent 35%, rgba(255,255,255,.25) 55%, rgba(0,0,0,.25)), var(--wax);
+  border-radius: .07em .07em .03em .03em;
+}
+.it .candle { font-size: 1.45em; }
+.candle.tea { width: .46em; height: .22em; background: linear-gradient(90deg, #8f949b, #e3e6ea 45%, #8a8f96); border-top: .06em solid #f6f0dc; }
+.candle.out { height: .3em; } .candle.tea.out { height: .2em; }
+.candle i {
+  position: absolute; left: 50%; bottom: calc(100% + .05em); width: .2em; height: .34em; translate: -50% 0;
+  background: radial-gradient(ellipse at 50% 78%, #fff 0 16%, #ffe08a 38%, #ff9a2e 70%, rgba(255,120,20,0) 74%);
+  border-radius: 50% 50% 50% 50% / 68% 68% 32% 32%; transform-origin: 50% 100%; animation: flicker 1.7s ease-in-out infinite;
+}
+.candle.out i { background: none; width: .03em; height: .08em; background-color: #222; border-radius: 0; animation: none; bottom: 100%; }
+@keyframes flicker { 0%,100% { transform: scale(1) rotate(-2deg); } 30% { transform: scale(.92,1.08) rotate(3deg); } 60% { transform: scale(1.05,.94) rotate(-4deg); } }
+.wreath { width: 1.5em; height: 1.5em; display: block; }
+.ribbon { width: .8em; height: 1.1em; display: block; }
+.pebble {
+  display: inline-block; min-width: 1.5em; padding: .28em .42em .32em; text-align: center; white-space: nowrap;
+  font: italic 600 .46em/1 var(--serif); color: #fbfaf5; text-shadow: 0 1px 1px rgba(0,0,0,.5);
+  background: radial-gradient(ellipse at 35% 25%, #a9adb3, #6d7178 70%, #575b62);
+  border-radius: 48% 52% 46% 54% / 62% 58% 42% 38%;
+}
+.ghost { position: absolute; z-index: 5; pointer-events: none; translate: -50% -100%; font-size: 34px; line-height: 1; opacity: .85; filter: drop-shadow(0 8px 4px rgba(0,0,0,.4)); display: none; }
+.scene.placing .ghost.on { display: block; }
+.scene.placing .items { cursor: copy; background: radial-gradient(ellipse at 50% 55%, rgba(255,222,155,.24), rgba(255,222,155,.07) 60%, transparent 78%); }
+.scene.placing .it { pointer-events: none; }
+
+.fly { position: absolute; z-index: 3; width: 4px; height: 4px; border-radius: 50%; background: #e9ff9a; box-shadow: 0 0 8px 3px rgba(220,255,130,.7); opacity: 0; pointer-events: none; animation: fly 9s ease-in-out infinite; }
+body[data-phase="night"] .fly, body[data-phase="dusk"] .fly { opacity: 1; }
+@keyframes fly { 0%,100% { transform: translate(0,0); opacity: 0; } 20% { opacity: .9; } 50% { transform: translate(46px,-34px); opacity: .2; } 75% { transform: translate(-22px,-58px); opacity: .9; } }
+
+.tip {
+  position: absolute; z-index: 6; max-width: min(280px, 84vw); padding: .55rem .75rem; border-radius: 8px;
+  background: #fffdf6; color: var(--ink); font-size: 16px; line-height: 1.3; box-shadow: 0 6px 24px rgba(0,0,0,.4);
+  translate: -50% calc(-100% - 12px); pointer-events: none; opacity: 0; transition: opacity .15s;
+}
+.tip.on { opacity: 1; }
+.tip q { font-style: italic; display: block; margin-top: .15rem; }
+.tip small { color: var(--ink-soft); display: block; margin-top: .2rem; font-size: 14px; }
+.phase-btn {
+  position: absolute; top: 14px; right: 14px; z-index: 7; width: 44px; height: 44px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.35); background: rgba(10,14,34,.35); color: #fff; font-size: 20px; line-height: 1;
+  backdrop-filter: blur(4px);
+}
+.phase-btn:hover { background: rgba(10,14,34,.6); }
+
+/* ───────── Action strip ───────── */
+.strip { background: var(--grass2); transition: background 1.2s; color: #f1f3e8; padding: 1rem 1.25rem 2.6rem; text-align: center; position: relative; z-index: 3; }
+.strip::after { /* the hill's curve again, in paper */
+  content: ''; position: absolute; left: -6%; right: -6%; bottom: -1px; height: 24px; background: var(--paper); border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+}
+.strip p { margin: .55rem 0 0; font-size: 17px; color: #dfe5d3; }
+.cta {
+  border: 0; border-radius: 999px; padding: .7rem 1.6rem; font: 600 21px/1.2 var(--serif);
+  background: #c44d10; color: #fff; box-shadow: 0 2px 0 #8a3408, 0 8px 24px rgba(232,96,28,.3); transition: transform .12s;
+}
+.cta:hover { transform: translateY(-1px); } .cta:active { transform: translateY(2px); box-shadow: 0 0 0 #8a3408; }
+.ghost-btn { border: 1px solid rgba(255,255,255,.4); background: none; color: inherit; border-radius: 999px; padding: .5rem 1.1rem; font-size: 18px; }
+.ghost-btn:hover { background: rgba(255,255,255,.1); }
+.placing-bar { display: none; gap: .6rem; align-items: center; justify-content: center; flex-wrap: wrap; }
+.placing-bar .hand { font-size: 30px; line-height: 1; display: inline-flex; align-items: flex-end; min-height: 34px; }
+.strip.placing .placing-bar { display: flex; } .strip.placing .idle { display: none; }
+
+/* ───────── Page ───────── */
+main { max-width: 860px; margin: 0 auto; padding: 2.5rem 1.25rem 1rem; }
+.lede { max-width: 640px; margin: 0 auto 2.5rem; text-align: center; font-size: 21px; text-wrap: pretty; }
+.lede em { color: var(--ink-soft); }
+h2 { font: 600 30px/1.2 var(--serif); margin: 3rem 0 .4rem; text-wrap: balance; }
+h3 { font: 600 21px/1.25 var(--serif); margin: 1.6rem 0 .4rem; }
+.sub { color: var(--ink-soft); margin: 0 0 1rem; max-width: 640px; text-wrap: pretty; }
+
+/* The offerings list, dressed as the thing itself */
+.gr { font: 13px/1.4 Arial, Helvetica, sans-serif; background: #fff; border: 1px solid var(--gr-line); border-radius: 4px; overflow: hidden; color: #000; }
+.gr-bar { background: var(--gr-chrome); border-bottom: 1px solid var(--gr-line); padding: 7px 9px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.gr-title { font-size: 16px; font-weight: bold; margin-right: auto; padding-right: 8px; }
+.gr-bar button, .gr-more {
+  font: 12px Arial, sans-serif; padding: 4px 9px; min-height: 26px; border: 1px solid #a9b6d6; border-radius: 3px; color: #222;
+  background: linear-gradient(#fff, #e6ebf7);
+}
+.gr-bar button:hover, .gr-more:hover { border-color: #6688ee; }
+.gr-bar button[aria-pressed="true"] { background: #c9d7f5; border-color: #6688ee; font-weight: bold; }
+.gr-list { list-style: none; margin: 0; padding: 0; max-height: 520px; overflow-y: auto; }
+.gr-list li { border-bottom: 1px solid #e3e7f1; background: #f3f5fc; border-left: 2px solid transparent; border-right: 2px solid transparent; }
+.gr-list li.unread { background: #fff; }
+.gr-list li.sel { border-color: #6688ee; box-shadow: inset 0 1px #6688ee, inset 0 -1px #6688ee; }
+.gr-row { display: flex; align-items: center; }
+.gr-star { border: 0; background: none; font-size: 17px; line-height: 1; padding: 0; width: 34px; min-height: 30px; color: #b8bfd0; flex: none; }
+.gr-star[aria-pressed="true"] { color: #f1b500; }
+.gr-open { flex: 1; min-width: 0; display: flex; gap: 10px; align-items: baseline; border: 0; background: none; padding: 6px 9px 6px 0; text-align: left; font: inherit; min-height: 30px; }
+.gr-src { width: 190px; flex: none; color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gr-ttl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gr-ttl span { color: #666; }
+.unread .gr-src, .unread .gr-ttl b { color: #000; font-weight: bold; }
+.gr-ttl b { font-weight: normal; }
+.gr-when { flex: none; color: #666; font-size: 12px; }
+.gr-body { display: none; padding: 4px 14px 16px 34px; gap: 16px; align-items: center; }
+li.open .gr-body { display: flex; }
+.gr-art { font-size: 44px; line-height: 1; flex: none; width: 76px; height: 76px; display: flex; justify-content: center; align-items: flex-end; padding-bottom: 9px; border-radius: 50%; background: linear-gradient(#6aa85a, #3d7a3f); }
+.gr-body h4 { font: bold 16px Arial, sans-serif; margin: 0 0 3px; color: var(--blue); }
+.gr-body p { margin: 2px 0; }
+.gr-body q { font: italic 19px/1.3 var(--serif); }
+.gr-body .meta { color: #666; font-size: 12px; }
+.gr-you { font: 11px Arial, sans-serif; background: #fde9a8; border: 1px solid #e6c34f; border-radius: 3px; padding: 0 4px; margin-left: 6px; color: #5b4a06; font-weight: normal; }
+.gr-body .link + .link { margin-left: 14px; }
+.gr-body .link { border: 0; background: none; padding: 0; color: var(--blue); text-decoration: underline; font: inherit; }
+.gr-empty { padding: 28px 16px; text-align: center; color: #666; background: #fff; }
+.gr-foot { background: var(--gr-chrome); border-top: 1px solid var(--gr-line); padding: 6px 9px; color: #445; display: flex; gap: 10px; justify-content: space-between; flex-wrap: wrap; align-items: center; }
+.gr-foot button { font: inherit; border: 0; background: none; padding: 2px 0; color: #1a3f8f; text-decoration: underline; min-height: 26px; }
+kbd { font: 12px var(--mono); background: #fff; border: 1px solid #b9bfcc; border-bottom-width: 2px; border-radius: 3px; padding: 0 5px; color: #222; white-space: nowrap; }
+
+/* Memorabilia */
+.relics { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+.relics li { border-bottom: 1px solid var(--rule); padding: .7rem 0; display: grid; grid-template-columns: 1fr auto; gap: .2rem .8rem; align-items: start; }
+.relics code { font: 14px/1.5 var(--mono); overflow-wrap: anywhere; color: #1d2f55; }
+.relics code a { color: inherit; }
+.relics p { grid-column: 1 / -1; margin: 0; color: var(--ink-soft); font-size: 17px; line-height: 1.4; }
+.copy { font: 12px var(--mono); border: 1px solid #cfc9bb; background: #fbf9f3; border-radius: 4px; padding: 3px 9px; min-height: 28px; color: var(--ink-soft); }
+.copy:hover { border-color: var(--rss); color: var(--ink); }
+.dead { text-decoration: line-through; text-decoration-color: rgba(29,47,85,.35); text-decoration-thickness: 1px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 2.5rem; }
+.life { list-style: none; margin: 0; padding: 0; }
+.life li { display: grid; grid-template-columns: 7.2em 1fr; gap: .8rem; padding: .3rem 0; line-height: 1.4; font-size: 18px; }
+.life time { font: 13px/1.9 var(--mono); color: var(--ink-soft); }
+.keys { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: .35rem .9rem; font-size: 18px; align-items: baseline; }
+.keys dt { white-space: nowrap; } .keys dd { margin: 0; }
+.keys kbd { font-size: 13px; padding: 1px 6px; }
+.take { display: flex; gap: .6rem; flex-wrap: wrap; margin: 1rem 0; }
+.take a, .take button {
+  display: inline-flex; align-items: center; gap: .45rem; text-decoration: none; border: 1px solid #cfc9bb; border-radius: 6px;
+  background: #fffdf8; color: var(--ink); padding: .45rem .9rem; font-size: 18px; min-height: 44px;
+}
+.take a:hover, .take button:hover { border-color: var(--rss); }
+.feedicon { width: 18px; height: 18px; border-radius: 4px; background: var(--rss); flex: none; }
+footer { max-width: 860px; margin: 0 auto; padding: 2rem 1.25rem 3rem; color: var(--ink-soft); font-size: 16px; }
+footer p { margin: .4rem 0; }
+.back a { color: var(--ink-soft); }
+
+/* Dialogs */
+dialog { border: 0; padding: 0; border-radius: 14px; width: min(620px, calc(100vw - 20px)); max-height: calc(100dvh - 20px); background: #fffdf8; color: var(--ink); box-shadow: 0 20px 80px rgba(0,0,0,.5); }
+dialog::backdrop { background: rgba(8,12,28,.6); }
+.dlg { display: flex; flex-direction: column; max-height: calc(100dvh - 20px); }
+.dlg-head { display: flex; align-items: center; padding: .9rem 1.1rem .5rem; }
+.dlg-head h2 { margin: 0 auto 0 0; font-size: 26px; }
+.x { border: 0; background: none; font-size: 28px; line-height: 1; width: 44px; height: 44px; border-radius: 50%; color: var(--ink-soft); }
+.x:hover { background: #efeadd; }
+.dlg-body { overflow-y: auto; padding: 0 1.1rem .5rem; }
+.tabs { display: flex; gap: 4px; overflow-x: auto; padding: 2px 0 6px; scrollbar-width: thin; }
+.tabs button { border: 1px solid var(--rule); background: #f6f2e8; border-radius: 999px; padding: .3rem .85rem; white-space: nowrap; font-size: 17px; min-height: 40px; }
+.tabs button[aria-selected="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+.blurb { margin: .3rem 0 .6rem; color: var(--ink-soft); font-size: 17px; font-style: italic; }
+.kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+.kinds button, .variants button { border: 1px solid var(--rule); background: #fff; border-radius: 10px; }
+.kinds button { background: #ece6d6; }
+.kinds button { padding: .6rem .3rem .5rem; display: flex; flex-direction: column; align-items: center; gap: .3rem; font-size: 15px; line-height: 1.15; min-height: 96px; }
+.kinds .a { font-size: 36px; line-height: 1; height: 46px; display: flex; align-items: flex-end; }
+.kinds button:hover .a { animation: wiggle .5s ease-in-out; }
+@keyframes wiggle { 30% { transform: rotate(-9deg) scale(1.1); } 70% { transform: rotate(7deg) scale(1.1); } }
+.kinds button[aria-pressed="true"], .variants button[aria-pressed="true"] { border-color: var(--rss); box-shadow: 0 0 0 2px var(--rss); background: #fff6ee; }
+.kinds button[aria-pressed="true"] { background: #f6dcc4; }
+.variants { display: flex; flex-wrap: wrap; gap: 6px; margin-top: .7rem; }
+.variants button { padding: .25rem .8rem; font-size: 16px; min-height: 40px; display: inline-flex; align-items: center; gap: .4rem; }
+.sw { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(0,0,0,.25); }
+.field { margin: 1rem 0 0; border: 0; padding: 0; min-width: 0; }
+.field legend, .field > label { font-weight: 600; padding: 0; display: block; margin-bottom: .3rem; }
+.words { max-height: 168px; overflow-y: auto; border: 1px solid var(--rule); border-radius: 10px; background: #fff; padding: 4px; }
+.words label { display: flex; gap: .5rem; align-items: baseline; padding: .3rem .5rem; border-radius: 6px; font-size: 17px; line-height: 1.3; cursor: pointer; }
+.words label:has(:checked) { background: #fff1e5; }
+.words input { accent-color: var(--rss); flex: none; }
+select { font: 17px var(--serif); padding: .4rem .5rem; border: 1px solid var(--rule); border-radius: 8px; background: #fff; color: var(--ink); max-width: 100%; min-height: 44px; }
+.dlg-foot { border-top: 1px solid var(--rule); padding: .8rem 1.1rem 1rem; display: flex; gap: .9rem; align-items: center; background: #faf6ec; border-radius: 0 0 14px 14px; }
+.preview { flex: 1; min-width: 0; font-size: 17px; line-height: 1.3; color: var(--ink-soft); }
+.dlg-foot .cta { font-size: 19px; padding: .6rem 1.2rem; flex: none; }
+.cta:disabled { background: #c9c3b6; box-shadow: none; cursor: not-allowed; transform: none; }
+#help .dlg-body { padding-bottom: 1.2rem; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 22px; translate: -50% 20px; z-index: 50; max-width: calc(100vw - 28px);
+  background: #1c1f2b; color: #fff; padding: .6rem 1.1rem; border-radius: 999px; font-size: 17px; line-height: 1.3; text-align: center;
+  opacity: 0; pointer-events: none; transition: opacity .25s, translate .25s; box-shadow: 0 8px 30px rgba(0,0,0,.35);
+}
+.toast.on { opacity: 1; translate: -50% 0; }
+
+@media (pointer: coarse) {
+  .gr-star { width: 44px; min-height: 44px; } .gr-open { min-height: 44px; }
+  .gr-bar button, .gr-more, .gr-foot button, .copy { min-height: 44px; padding-left: 12px; padding-right: 12px; }
+  .gr-body .link { min-height: 44px; } .words label { padding-top: .6rem; padding-bottom: .6rem; } .tabs button { min-height: 44px; }
+}
+@media (max-width: 640px) {
+  .tabs { flex-wrap: wrap; } .words { max-height: 42vh; }
+  body { font-size: 18px; }
+  .scene { height: clamp(460px, 72vh, 600px); }
+  .stone { height: 42%; }
+  .it { font-size: calc(var(--s) * 28px); }
+  .orb { width: 40px; height: 40px; right: 10%; }
+  .two { grid-template-columns: 1fr; }
+  .gr-src { display: none; }
+  .gr-body { padding-left: 12px; }
+  .dlg-foot { flex-direction: column; align-items: stretch; text-align: center; }
+  .life li { grid-template-columns: 6.4em 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .it.pulse { outline: 2px solid #fff; outline-offset: 5px; border-radius: 10px; }
+}
+</style>
+</head>
+<body data-phase="night">
+
+<header class="scene" id="scene">
+  <div class="stars" id="stars" aria-hidden="true"></div>
+  <div class="orb" aria-hidden="true"></div>
+  <svg class="hills" viewBox="0 0 1000 200" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0 200V120C120 60 220 90 330 70S560 10 680 60s210 20 320-10v150z"/>
+    <path d="M0 200V150c140-50 260-10 400-40s250-50 380-10 150 20 220 10v90z"/>
+  </svg>
+  <div class="ground" id="ground" aria-hidden="true"></div>
+  <span class="ninja" id="ninja" aria-hidden="true">🥷</span>
+
+  <div class="stone">
+    <div class="stone-face">
+      <svg viewBox="0 0 48 48" fill="none" stroke="#33373d" stroke-width="5" stroke-linecap="round" aria-hidden="true">
+        <circle cx="11" cy="37" r="4.5" fill="#33373d" stroke="none"/>
+        <path d="M8 22a18 18 0 0 1 18 18M8 8a32 32 0 0 1 32 32"/>
+      </svg>
+      <p class="memory">In loving memory of</p>
+      <h1>Google Reader</h1>
+      <p class="dates">October 7, 2005<span role="presentation"></span>July 1, 2013</p>
+      <p class="epi">“All items read.”</p>
+    </div>
+  </div>
+
+  <div class="items" id="items" role="img" aria-label="The grass in front of the headstone, where visitors' offerings rest. The same offerings are listed below."></div>
+  <i class="fly" style="left:18%;top:55%"></i><i class="fly" style="left:72%;top:63%;animation-delay:-3s"></i>
+  <i class="fly" style="left:40%;top:78%;animation-delay:-5s"></i><i class="fly" style="left:86%;top:48%;animation-delay:-7s"></i>
+  <div class="ghost" id="ghost" aria-hidden="true"></div>
+  <div class="tip" id="tip" role="status"></div>
+  <button class="phase-btn" id="phase" type="button" aria-label="Change the time of day" title="Change the time of day">☾</button>
+</header>
+
+<div class="strip" id="strip">
+  <div class="idle">
+    <button class="cta" id="lay" type="button">Lay an offering</button>
+    <p id="tally">Flowers, candles, stones, a cup of coffee. Bring what you would bring a friend.</p>
+  </div>
+  <div class="placing-bar">
+    <span class="hand" id="hand"></span>
+    <span id="place-hint">Tap the grass where you want to leave it.</span>
+    <button class="cta" id="confirm" type="button" hidden>Leave it here</button>
+    <button class="ghost-btn" id="auto" type="button">Place it for me</button>
+    <button class="ghost-btn" id="cancel" type="button">Cancel</button>
+  </div>
+</div>
+
+<main>
+  <p class="lede">
+    For nearly seven years and nine months it fetched the whole web every morning and handed it over in one quiet list.
+    Then it was retired, and a lot of us never quite found the way back.
+    <em>This is a place to leave something for it.</em>
+  </p>
+
+  <section class="gr" aria-labelledby="gr-title">
+    <div class="gr-bar">
+      <span class="gr-title" id="gr-title">All offerings <span id="unread"></span></span>
+      <button type="button" id="refresh">Refresh</button>
+      <button type="button" id="markall">Mark all as read</button>
+      <button type="button" id="f-all" aria-pressed="true">All</button>
+      <button type="button" id="f-star" aria-pressed="false">★ Starred</button>
+    </div>
+    <ol class="gr-list" id="list"></ol>
+    <div class="gr-foot">
+      <span><kbd>j</kbd> <kbd>k</kbd> next and previous · <kbd>s</kbd> star · <button type="button" id="helpbtn">all shortcuts</button> · <button type="button" id="keys" aria-pressed="true">Shortcuts: on</button></span>
+      <span id="mode" role="status"></span>
+    </div>
+  </section>
+
+  <h2>Take something home</h2>
+  <p class="sub">The altar publishes every offering as a feed, in both of the formats it loved. Subscribe in whatever reader you ended up with.</p>
+  <div class="take">
+    <a href="/feed.atom"><span class="feedicon" aria-hidden="true"></span>Atom feed</a>
+    <a href="/feed.rss"><span class="feedicon" aria-hidden="true"></span>RSS feed</a>
+    <button type="button" id="opml">⬇ subscriptions.xml</button>
+  </div>
+  <p class="sub">The last one is a small OPML file, the kind Reader handed you on the way out. Any feed reader can import it.</p>
+
+  <h2>What it left behind</h2>
+  <p class="sub">Addresses that used to mean something. The struck-through ones no longer answer. You can still copy them.</p>
+
+  <h3>Where it lived</h3>
+  <ul class="relics">
+    <li><code class="dead">http://www.google.com/reader/view/</code><button class="copy" type="button">copy</button>
+      <p>Home. Most people typed <code>reader.google.com</code> and let it redirect.</p></li>
+    <li><code class="dead">http://www.google.com/reader/view/#stream/user%2F-%2Fstate%2Fcom.google%2Freading-list</code><button class="copy" type="button">copy</button>
+      <p>All items. The <code>user/-/</code> part meant "whoever is signed in", which felt like being recognized.</p></li>
+    <li><code class="dead">http://www.google.com/reader/shared/&lt;your-id&gt;</code><button class="copy" type="button">copy</button>
+      <p>Your public Shared items page, until October 2011. Small communities formed around these.</p></li>
+  </ul>
+
+  <h3>The API nobody was promised</h3>
+  <ul class="relics">
+    <li><code class="dead">http://www.google.com/reader/atom/feed/http://xkcd.com/atom.xml?n=20</code><button class="copy" type="button">copy</button>
+      <p>Any feed on the web, served back as Atom from Reader's own archive. It often remembered posts the original feed had long dropped.</p></li>
+    <li><code class="dead">http://www.google.com/reader/api/0/unread-count?output=json</code><button class="copy" type="button">copy</button>
+      <p>Where the number came from. It stopped counting at 1,000 and just said <code>1000+</code>.</p></li>
+    <li><code class="dead">http://www.google.com/reader/api/0/stream/contents/user/-/state/com.google/starred?n=1000</code><button class="copy" type="button">copy</button>
+      <p>Everything you ever starred, as JSON. Swap <code>starred</code> for <code>reading-list</code>, <code>broadcast</code> (shared) or <code>read</code>.</p></li>
+    <li><code class="dead">http://www.google.com/reader/public/atom/user/&lt;your-id&gt;/state/com.google/broadcast</code><button class="copy" type="button">copy</button>
+      <p>Your shared items as an Atom feed, so that friends could subscribe to your taste.</p></li>
+    <li><code class="dead">http://www.google.com/reader/subscriptions/export</code><button class="copy" type="button">copy</button>
+      <p>One click, one <code>google-reader-subscriptions.xml</code>. The door was always unlocked.</p></li>
+  </ul>
+
+  <h3>Still answering</h3>
+  <ul class="relics">
+    <li><code><a href="http://googlereader.blogspot.com/feeds/posts/default">http://googlereader.blogspot.com/feeds/posts/default</a></code><button class="copy" type="button">copy</button>
+      <p>The Official Google Reader Blog, as Atom. Its last entry is titled "A final farewell". Add <code>?alt=rss</code> for RSS.</p></li>
+    <li><code><a href="/feed.atom" id="u-atom">https://reader.apps.andymolenda.com/feed.atom</a></code><button class="copy" type="button">copy</button>
+      <p>This altar, as Atom (RFC 4287, published two months after Reader launched).</p></li>
+    <li><code><a href="/feed.rss" id="u-rss">https://reader.apps.andymolenda.com/feed.rss</a></code><button class="copy" type="button">copy</button>
+      <p>This altar, as RSS 2.0.</p></li>
+  </ul>
+
+  <div class="two">
+    <div>
+      <h2>A short life</h2>
+      <ul class="life">
+        <li><time datetime="2005-10-07">Oct 7, 2005</time><span>Launches in Google Labs, built by a small team around Chris Wetherell.</span></li>
+        <li><time datetime="2006-09-28">Sep 28, 2006</time><span>Rewritten from the ground up: the river of news, unread counts, sharing.</span></li>
+        <li><time datetime="2007-09">Sep 2007</time><span>Graduates from Labs. Search finally arrives.</span></li>
+        <li><time datetime="2008-06">Jun 2008</time><span>Someone hides a ninja behind the Konami code.</span></li>
+        <li><time datetime="2011-10-31">Oct 31, 2011</time><span>Sharing, friends and notes are removed in favor of Google+.</span></li>
+        <li><time datetime="2013-03-13">Mar 13, 2013</time><span>"Powering down Google Reader." The web objects, loudly.</span></li>
+        <li><time datetime="2013-07-01">Jul 1, 2013</time><span>Retired. The servers go quiet a little after midnight that night, Pacific time.</span></li>
+        <li><time datetime="2013-07-15">Jul 15, 2013</time><span>Takeout closes. Whatever wasn't exported is gone.</span></li>
+      </ul>
+    </div>
+    <div>
+      <h2>Muscle memory</h2>
+      <dl class="keys">
+        <dt><kbd>j</kbd> <kbd>k</kbd></dt><dd>next, previous item</dd>
+        <dt><kbd>n</kbd> <kbd>p</kbd></dt><dd>scan down, up without opening</dd>
+        <dt><kbd>o</kbd> <kbd>Enter</kbd></dt><dd>open or close</dd>
+        <dt><kbd>s</kbd></dt><dd>star</dd>
+        <dt><kbd>m</kbd></dt><dd>mark read or unread</dd>
+        <dt><kbd>Shift</kbd>+<kbd>a</kbd></dt><dd>mark all as read</dd>
+        <dt><kbd>v</kbd></dt><dd>view original (here: find it on the grass)</dd>
+        <dt><kbd>r</kbd></dt><dd>refresh</dd>
+        <dt><kbd>g</kbd> <kbd>a</kbd></dt><dd>go to all items</dd>
+        <dt><kbd>g</kbd> <kbd>s</kbd></dt><dd>go to starred</dd>
+      </dl>
+      <p class="sub" style="margin-top:.9rem">They all still work on the list above. So does one that was never in the help page.</p>
+    </div>
+  </div>
+
+  <h2>Survived by</h2>
+  <p class="sub" style="max-width:none">
+    <a href="https://feedly.com">Feedly</a>, <a href="https://www.inoreader.com">Inoreader</a>, <a href="https://newsblur.com">NewsBlur</a> and
+    <a href="https://theoldreader.com">The Old Reader</a>, who took us in; and by the ones you can run yourself:
+    <a href="https://freshrss.org">FreshRSS</a>, <a href="https://miniflux.app">Miniflux</a> and <a href="https://github.com/tt-rss/tt-rss">Tiny Tiny RSS</a> (now a community fork).
+    FreshRSS, Miniflux, Inoreader and The Old Reader still speak the "Google Reader API", so that old apps can keep syncing with a service that is no longer there. Also survived by RSS and Atom themselves, which were never the ones in trouble.
+  </p>
+</main>
+
+<footer>
+  <p>A fan memorial. Not affiliated with or endorsed by Google, which made Google Reader. Offerings are chosen from fixed lists, so nothing typed by visitors is stored, and nothing about you is kept beyond the offering itself.</p>
+  <p class="back"><a href="https://apps.andymolenda.com">&larr; apps.andymolenda.com</a></p>
+</footer>
+
+<dialog id="picker" aria-labelledby="picker-title">
+  <form class="dlg" method="dialog" id="picker-form">
+    <div class="dlg-head"><h2 id="picker-title">What will you bring?</h2><button class="x" type="button" data-close aria-label="Close">×</button></div>
+    <div class="dlg-body">
+      <div class="tabs" id="tabs" role="tablist" aria-label="Kinds of offering"></div>
+      <p class="blurb" id="blurb"></p>
+      <div class="kinds" id="kinds"></div>
+      <div class="variants" id="variants"></div>
+      <fieldset class="field">
+        <legend id="words-legend">A few words to leave with it</legend>
+        <div class="words" id="words"></div>
+      </fieldset>
+      <p class="field"><label for="sig">From</label>
+        <select id="sig"></select></p>
+    </div>
+    <div class="dlg-foot">
+      <div class="preview" id="preview" aria-live="polite">Pick something above.</div>
+      <button class="cta" type="submit" id="carry" disabled>Carry it over</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="help" aria-labelledby="help-title">
+  <div class="dlg">
+    <div class="dlg-head"><h2 id="help-title">Keyboard shortcuts</h2><button class="x" type="button" data-close aria-label="Close">×</button></div>
+    <div class="dlg-body">
+      <dl class="keys">
+        <dt><kbd>j</kbd> <kbd>k</kbd></dt><dd>next, previous offering</dd>
+        <dt><kbd>n</kbd> <kbd>p</kbd></dt><dd>scan down, up without opening</dd>
+        <dt><kbd>o</kbd> <kbd>Enter</kbd></dt><dd>open or close</dd>
+        <dt><kbd>s</kbd></dt><dd>star</dd>
+        <dt><kbd>m</kbd></dt><dd>mark read or unread</dd>
+        <dt><kbd>Shift</kbd>+<kbd>a</kbd></dt><dd>mark all as read</dd>
+        <dt><kbd>v</kbd></dt><dd>find it on the grass</dd>
+        <dt><kbd>r</kbd></dt><dd>refresh</dd>
+        <dt><kbd>g</kbd> <kbd>a</kbd> / <kbd>g</kbd> <kbd>s</kbd></dt><dd>all offerings / starred</dd>
+        <dt><kbd>l</kbd></dt><dd>lay an offering</dd>
+        <dt><kbd>?</kbd></dt><dd>this list</dd>
+      </dl>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script type="module">
+import { CATEGORIES, KINDS, PHRASES, SIGS, describe, capitalize, validOffering } from './catalog.js';
+import { ART } from './art.js';
+
+const $ = (s, r = document) => r.querySelector(s);
+const store = {
+  get(k, d) { try { const v = JSON.parse(localStorage.getItem('reader.' + k)); return v ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('reader.' + k, JSON.stringify(v)); } catch { /* private mode: carry on */ } },
+};
+const esc = (s) => String(s).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+
+const DAY = 86400;
+const WILT_AFTER = 5 * DAY, FLOWER_GONE = 30 * DAY, BURN_FOR = 1.5 * DAY, STUB_GONE = 14 * DAY;
+const BASE_TITLE = document.title;
+
+// ── State ──────────────────────────────────────────────────────────────
+let items = [];                       // tuples, newest first
+let totals = { total: 0, counts: {} };
+let online = true;
+let firstPaint = true;
+const seen = new Set();               // ids already drawn on the grass
+let mine = store.get('mine', []);     // offerings laid from this browser
+const isMine = (id) => mine.some((m) => m[0] === id);
+let known = null;                     // ids the altar had last time we looked
+const read = new Set(store.get('read', []));
+const starred = new Set(store.get('starred', []));
+let filter = 'all', selected = null, shown = 60;
+
+const here = location.protocol.startsWith('http') ? location.origin : 'https://reader.apps.andymolenda.com';
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const glide = reduceMotion ? 'auto' : 'smooth';
+const scene = $('#scene'), itemsEl = $('#items'), tip = $('#tip'), listEl = $('#list');
+
+// ── Art ────────────────────────────────────────────────────────────────
+function wreath(color) {
+  let leaves = '';
+  for (let i = 0; i < 20; i++) {
+    const a = i * 18;
+    leaves += `<ellipse cx="50" cy="15" rx="7" ry="12.5" fill="${i % 2 ? '#3f7d3a' : '#2c6231'}" transform="rotate(${a} 50 50) rotate(${i % 2 ? 24 : -24} 50 15)"/>`;
+  }
+  return `<svg class="wreath" viewBox="0 0 100 100" aria-hidden="true">${leaves}
+    <path d="M50 82 30 72v20zM50 82l20-10v20z" fill="${color}" stroke="rgba(0,0,0,.25)"/>
+    <path d="M47 84 38 100l9-3zM53 84l9 16-9-3z" fill="${color}" stroke="rgba(0,0,0,.25)"/><circle cx="50" cy="82" r="4.5" fill="${color}" stroke="rgba(0,0,0,.3)"/></svg>`;
+}
+const ribbon = (color) => `<svg class="ribbon" viewBox="0 0 70 100" aria-hidden="true"><path d="M14 96 44 30Q50 8 35 8T26 30L56 96" fill="none" stroke="${color}" stroke-width="12" stroke-linejoin="round"/><path d="M14 96 44 30Q50 8 35 8T26 30L56 96" fill="none" stroke="rgba(0,0,0,.25)" stroke-width="1"/></svg>`;
+
+function art(kindId, v = 0, out = false) {
+  const k = KINDS[kindId];
+  if (ART[kindId]) return `<svg class="ob" viewBox="0 0 48 48" aria-hidden="true">${ART[kindId]}</svg>`;
+  if (k.e) return `<span class="em">${k.e}</span>`;   // fallback for a kind with no drawing yet
+  const val = k.variants ? (k.variants[v] || k.variants[0])[1] : '';
+  if (k.art === 'candle') return `<span class="candle${out ? ' out' : ''}" style="--wax:${val}"><i></i></span>`;
+  if (k.art === 'tealight') return `<span class="candle tea${out ? ' out' : ''}"><i></i></span>`;
+  if (k.art === 'wreath') return wreath(val);
+  if (k.art === 'ribbon') return ribbon(val);
+  return `<span class="pebble">${esc(val)}</span>`;
+}
+
+// How an offering has aged: { gone, wilt, out, lit }
+function condition([, t, kindId]) {
+  const k = KINDS[kindId], age = Date.now() / 1000 - t;
+  if (k.fresh) return { gone: age > FLOWER_GONE, wilt: age > WILT_AFTER };
+  if (k.burns) return { gone: age > STUB_GONE, out: age > BURN_FOR, lit: age <= BURN_FOR };
+  return { lit: !!k.glow };
+}
+
+// ── Time ───────────────────────────────────────────────────────────────
+function when(t) {            // the way the list used to say it
+  const d = new Date(t * 1000), now = new Date();
+  return d.toDateString() === now.toDateString()
+    ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function ago(t) {
+  const s = Math.max(0, Date.now() / 1000 - t);
+  if (s < 90) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)} minutes ago`;
+  if (s < 2 * DAY) return `${Math.round(s / 3600)} hour${s < 5400 ? '' : 's'} ago`;
+  return `${Math.round(s / DAY)} days ago`;
+}
+
+// ── The grass ──────────────────────────────────────────────────────────
+let altarSig = '';
+function renderAltar() {
+  const limit = innerWidth < 640 ? 60 : 170;
+  const visible = items.filter((it) => KINDS[it[2]] && !condition(it).gone).slice(0, limit);
+  // Redraw only when something changed, so candles keep flickering and hovers survive the poll.
+  const sig = visible.map((it) => { const c = condition(it); return it[0] + (c.wilt ? 'w' : '') + (c.out ? 'o' : ''); }).join();
+  if (sig === altarSig) return;
+  altarSig = sig;
+  itemsEl.innerHTML = visible.sort((a, b) => a[7] - b[7]).map((it) => {
+    const [id, , kind, v, , , x, y] = it, c = condition(it), cat = KINDS[kind].c;
+    const cls = ['it', c.wilt && 'wilt', c.lit && 'lit', isMine(id) && 'mine', !firstPaint && !seen.has(id) && 'new'].filter(Boolean).join(' ');
+    // Things get put down a little crooked. Candles and drinks stay upright.
+    const tilt = cat === 'candles' || cat === 'food' ? 0 : [...id].reduce((n, ch) => n + ch.charCodeAt(0), 0) % 15 - 7;
+    return `<span class="${cls}" data-id="${esc(id)}" style="left:${(5 + x / 999 * 90).toFixed(1)}%;top:${(10 + y / 999 * 84).toFixed(1)}%;--s:${(0.6 + y / 999 * 0.9).toFixed(2)};--d:${(y / 999).toFixed(2)};--r:${tilt}deg;z-index:${y}">${art(kind, v, c.out)}</span>`;
+  }).join('');
+  for (const it of visible) seen.add(it[0]);
+  firstPaint = false;
+}
+
+function burst(id) {
+  const el = $(`.it[data-id="${CSS.escape(id)}"]`, itemsEl);
+  if (!el || reduceMotion) return;
+  const cat = KINDS[items.find((it) => it[0] === id)?.[2]]?.c;
+  const colors = cat === 'flowers' ? ['#ff8fb1', '#ffd166', '#fff'] : cat === 'candles' ? ['#ffd76a', '#ff9a2e'] : ['#fff', '#cfe0ff', '#ffd9a0'];
+  const b = document.createElement('span');
+  b.className = 'burst'; b.style.left = el.style.left; b.style.top = el.style.top;
+  b.innerHTML = '<b></b>' + Array.from({ length: 9 }, (_, i) => `<i style="--a:${i * 40 - 160}deg;--c:${colors[i % colors.length]}"></i>`).join('');
+  itemsEl.append(b);
+  setTimeout(() => b.remove(), 1300);
+}
+
+function tipFor(el) {
+  const it = items.find((i) => i[0] === el.dataset.id);
+  if (!it) return;
+  const [, t, kind, v, p, s] = it, c = condition(it);
+  const state = c.wilt ? ' · wilted now, still here' : c.out ? ' · burned down' : '';
+  tip.innerHTML = `<strong>${esc(capitalize(describe(kind, v)))}</strong>${p >= 0 && PHRASES[p] ? `<q>${esc(PHRASES[p])}</q>` : ''}<small>from ${isMine(el.dataset.id) ? 'you, ' : ''}${esc(SIGS[s] || SIGS[0])} · ${ago(t)}${state}</small>`;
+  const a = el.getBoundingClientRect(), b = scene.getBoundingClientRect();
+  const half = Math.min(140, innerWidth * 0.42);
+  tip.style.left = Math.max(half + 6, Math.min(b.width - half - 6, a.left - b.left + a.width / 2)) + 'px';
+  tip.style.top = Math.max(120, a.top - b.top) + 'px';
+  tip.classList.add('on');
+}
+const hideTip = () => tip.classList.remove('on');
+
+// Hover is for mice only: on touch, the mouseout that follows a tap would close the card again.
+itemsEl.addEventListener('pointerover', (e) => { const el = e.target.closest('.it'); if (el && !placing && e.pointerType === 'mouse') tipFor(el); });
+itemsEl.addEventListener('pointerout', (e) => { if (e.pointerType === 'mouse' && e.target.closest('.it')) hideTip(); });
+document.addEventListener('click', (e) => { if (!e.target.closest('#items')) hideTip(); });
+
+// ── The list ───────────────────────────────────────────────────────────
+function visibleList() { return filter === 'star' ? items.filter((it) => starred.has(it[0])) : items; }
+
+let listHtml = null;
+function renderList() {
+  let html;
+  const all = visibleList().filter((it) => KINDS[it[2]]);
+  if (!all.length) {
+    html = `<li class="gr-empty">${filter === 'star' ? 'No starred offerings yet. Press <kbd>s</kbd> on one to keep it close.' : 'Nothing here yet. Yours can be the first.'}</li>`;
+  } else {
+    html = all.slice(0, shown).map((it) => {
+      const [id, t, kind, v, p, s] = it, c = condition(it);
+      const cls = [!read.has(id) && 'unread', id === selected && 'sel', id === selected && openId === id && 'open'].filter(Boolean).join(' ');
+      const title = capitalize(describe(kind, v)), words = p >= 0 && PHRASES[p] ? PHRASES[p] : '';
+      const on = starred.has(id);
+      return `<li class="${cls}" data-id="${esc(id)}" id="o-${esc(id)}">
+        <div class="gr-row">
+          <button class="gr-star" type="button" aria-pressed="${on}" aria-label="${on ? 'Remove star' : 'Add star'}">${on ? '★' : '☆'}</button>
+          <button class="gr-open" type="button" aria-expanded="${id === selected && openId === id}">
+            <span class="gr-src">${esc(SIGS[s] || SIGS[0])}</span>
+            <span class="gr-ttl"><b>${esc(title)}</b>${isMine(id) ? '<span class="gr-you">yours</span>' : ''}${words ? `<span> - ${esc(words)}</span>` : ''}</span>
+            <span class="gr-when">${when(t)}</span>
+          </button>
+        </div>
+        ${id === selected && openId === id ? `<div class="gr-body">
+          <div class="gr-art">${art(kind, v, c.out)}</div>
+          <div><h4>${esc(title)}</h4>
+            <p>${words ? `<q>${esc(words)}</q>` : 'Left without a note.'}</p>
+            <p class="meta">from ${esc(SIGS[s] || SIGS[0])} · ${new Date(t * 1000).toLocaleString([], { dateStyle: 'long', timeStyle: 'short' })}${c.wilt ? ' · wilted now' : c.out ? ' · burned down' : ''}</p>
+            <p><button class="link" type="button" data-find>Find it on the grass</button><button class="link" type="button" data-link>Copy link</button></p></div>
+        </div>` : ''}
+      </li>`;
+    }).join('') + (all.length > shown ? `<li class="gr-empty"><button class="gr-more" type="button" id="more">Show older offerings</button></li>` : '');
+  }
+  if (html !== listHtml) {
+    // Rebuilding the rows must not drop keyboard focus.
+    const a = document.activeElement, li = a && a.closest ? a.closest('#list li[data-id]') : null;
+    const where = li && { id: li.dataset.id, sel: a.hasAttribute('data-link') ? '[data-link]' : a.hasAttribute('data-find') ? '[data-find]' : a.classList.contains('gr-star') ? '.gr-star' : '.gr-open' };
+    listEl.innerHTML = listHtml = html;
+    if (where) {
+      const row = $(`li[data-id="${CSS.escape(where.id)}"]`, listEl);
+      (row?.querySelector(where.sel) || row?.querySelector('.gr-open'))?.focus({ preventScroll: true });
+    }
+  }
+  const unread = items.filter((it) => !read.has(it[0])).length;
+  $('#unread').textContent = unread ? `(${unread > 1000 ? '1000+' : unread})` : '';
+  document.title = (unread ? `(${unread > 1000 ? '1000+' : unread}) ` : '') + BASE_TITLE;
+  $('#f-all').setAttribute('aria-pressed', filter === 'all');
+  $('#f-star').setAttribute('aria-pressed', filter === 'star');
+}
+let openId = null;
+
+function saveSets() {
+  // Prune ids the altar has dropped, but only when we can actually see the altar.
+  const live = new Set(items.map((it) => it[0]));
+  store.set('read', online ? [...read].filter((id) => live.has(id)) : [...read]);
+  store.set('starred', [...starred]);
+}
+function select(id, open) {
+  selected = id;
+  openId = open ? id : null;
+  if (open) read.add(id);
+  saveSets(); renderList();
+  $(`li[data-id="${CSS.escape(id)}"]`, listEl)?.scrollIntoView({ block: 'nearest' });
+}
+function step(dir, open) {
+  const all = visibleList();
+  if (!all.length) return;
+  let i = all.findIndex((it) => it[0] === selected) + dir;
+  if (selected === null) i = dir > 0 ? 0 : all.length - 1;
+  i = Math.max(0, Math.min(all.length - 1, i));
+  if (i >= shown) shown += 60;
+  select(all[i][0], open);
+}
+function toggleStar(id) {
+  starred.has(id) ? starred.delete(id) : starred.add(id);
+  saveSets(); renderList();
+}
+function markAll() {
+  for (const it of items) read.add(it[0]);
+  saveSets(); renderList();
+  toast('Marked all as read. It would have wanted that.');
+}
+function findOnGrass(id) {
+  const el = $(`.it[data-id="${CSS.escape(id)}"]`, itemsEl);
+  if (!el) return toast('The grass has been tidied since, but it stays in the feed.');
+  scene.scrollIntoView({ behavior: glide, block: 'start' });
+  el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
+  setTimeout(() => el.classList.remove('pulse'), 3500);
+  setTimeout(() => tipFor(el), 500);
+}
+
+listEl.addEventListener('click', (e) => {
+  if (e.target.id === 'more') { shown += 60; return renderList(); }
+  const li = e.target.closest('li[data-id]');
+  if (!li) return;
+  const id = li.dataset.id;
+  if (e.target.closest('.gr-star')) return toggleStar(id);
+  if (e.target.closest('[data-find]')) return findOnGrass(id);
+  if (e.target.closest('[data-link]')) {
+    return navigator.clipboard.writeText(`${here}/#o-${id}`).then(() => toast('Link copied.'), () => toast(`${here}/#o-${id}`));
+  }
+  if (e.target.closest('.gr-open')) select(id, !(selected === id && openId === id));
+});
+$('#refresh').onclick = () => refresh(true);
+$('#markall').onclick = markAll;
+$('#f-all').onclick = () => { filter = 'all'; renderList(); };
+$('#f-star').onclick = () => { filter = 'star'; renderList(); };
+
+// ── Tally ──────────────────────────────────────────────────────────────
+function renderTally() {
+  const counts = online ? totals.counts : items.reduce((m, it) => { const c = KINDS[it[2]]?.c; if (c) m[c] = (m[c] || 0) + 1; return m; }, {});
+  const total = online ? totals.total : items.length;
+  const parts = CATEGORIES.filter((c) => counts[c.id]).map((c) => `${c.name} ${counts[c.id].toLocaleString()}`);
+  $('#tally').textContent = total
+    ? `${total.toLocaleString()} offering${total === 1 ? '' : 's'} so far. ${parts.join(' · ')}${anniversary()}`
+    : 'Nothing on the grass yet. Bring what you would bring a friend.';
+  $('#mode').textContent = online ? '' : 'Shared altar unreachable: showing what this browser has laid.';
+}
+
+function anniversary() {
+  const d = new Date(), md = `${d.getMonth() + 1}-${d.getDate()}`, y = d.getFullYear();
+  return md === '10-7' ? ` · Today it would have turned ${y - 2005}.` : md === '7-1' ? ` · Retired ${y - 2013} years ago today.` : '';
+}
+
+// ── Talking to the altar ───────────────────────────────────────────────
+function merge(serverItems) {
+  const ids = new Set(serverItems.map((it) => it[0]));
+  const oldest = serverItems.length >= 500 ? serverItems[serverItems.length - 1][1] : 0;
+  const extra = mine.filter((it) => !ids.has(it[0]) && it[1] >= oldest && KINDS[it[2]]);
+  return [...serverItems, ...extra].sort((a, b) => b[1] - a[1]);
+}
+function apply(data) {
+  online = true;
+  totals = { total: data.total || 0, counts: data.counts || {} };
+  items = merge(Array.isArray(data.items) ? data.items : []);
+}
+function paint() { renderAltar(); renderList(); renderTally(); }
+
+async function refresh(loud) {
+  try {
+    const res = await fetch('/api/altar', { headers: { accept: 'application/json' }, cache: loud ? 'no-store' : 'default' });
+    if (!res.ok || !(res.headers.get('content-type') || '').includes('json')) throw new Error('no altar');
+    const data = await res.json();
+    const fresh = known ? (data.items || []).filter((it) => !known.has(it[0]) && !isMine(it[0]) && KINDS[it[2]]) : [];
+    apply(data);
+    known = new Set(items.map((it) => it[0]));
+    if (fresh.length === 1) toast(`Someone just left ${describe(fresh[0][2], fresh[0][3])}.`);
+    else if (fresh.length) toast(`${fresh.length} new offerings just arrived.`);
+    else if (loud) toast('No new items.');
+  } catch {
+    online = false;
+    items = merge([]);
+    if (loud) toast('The shared altar is not answering right now.');
+  }
+  paint();
+}
+
+async function lay(o) {
+  const local = () => {
+    const tuple = ['l' + Date.now().toString(36), Math.floor(Date.now() / 1000), o.kind, o.variant, o.phrase, o.sig, o.x, o.y];
+    mine.push(tuple); store.set('mine', mine.slice(-200));
+    items = merge(items.filter((it) => !mine.some((m) => m[0] === it[0])));
+    return tuple[0];
+  };
+  const cat = KINDS[o.kind].c, burnsOut = new Date(Date.now() + BURN_FOR * 1000), h = burnsOut.getHours();
+  let id, message = KINDS[o.kind].burns
+    ? `Lit. It will burn until ${burnsOut.toLocaleDateString([], { weekday: 'long' })} ${h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'}.`
+    : KINDS[o.kind].fresh ? 'Laid with care. It will stay fresh for five days.'
+    : cat === 'food' ? 'Set down with care. It is in the feed now, too.' : 'Laid with care. It is in the feed now, too.';
+  try {
+    if (!online) throw new Error('offline');
+    const res = await fetch('/api/altar', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(o) });
+    const data = await res.json();
+    if (res.status === 429 && data.error === 'slow') {     // keep it in hand for another try
+      Object.assign(choice, { kind: o.kind, variant: o.variant, phrase: o.phrase, sig: o.sig });
+      startPlacing();
+      return toast('Gently. Give it a minute, then set it down.');
+    }
+    if (!res.ok) throw new Error(data.error || 'failed');
+    id = data.id;
+    mine.push(data.items.find((it) => it[0] === id)); store.set('mine', mine.slice(-200));
+    apply(data);
+  } catch (err) {
+    id = local();
+    message = err.message === 'full'
+      ? 'The altar has taken all it can for today. Yours is kept in this browser.'
+      : 'The shared altar is unreachable, so yours is kept in this browser.';
+  }
+  read.add(id); saveSets();
+  known?.add(id);
+  choice.kind = null;
+  paint();
+  burst(id);
+  const laid = $(`.it[data-id="${CSS.escape(id)}"]`, itemsEl);   // show them which one is theirs
+  if (laid) { tipFor(laid); setTimeout(hideTip, 4500); }
+  toast(message);
+}
+
+// ── Picker ─────────────────────────────────────────────────────────────
+const picker = $('#picker');
+const choice = { cat: 'flowers', kind: null, variant: 0, phrase: -1, sig: store.get('sig', 0) };
+
+function renderPicker() {
+  $('#tabs').innerHTML = CATEGORIES.map((c) => `<button type="button" role="tab" aria-selected="${c.id === choice.cat}" data-cat="${c.id}">${c.name}</button>`).join('');
+  $('#blurb').textContent = CATEGORIES.find((c) => c.id === choice.cat).blurb;
+  $('#kinds').innerHTML = Object.entries(KINDS).filter(([, k]) => k.c === choice.cat).map(([id, k]) =>
+    `<button type="button" data-kind="${id}" aria-pressed="${id === choice.kind}"><span class="a">${art(id, id === choice.kind ? choice.variant : 0)}</span>${esc(capitalize(k.n.replace(/^an? /, '').split(',')[0]))}</button>`).join('');
+  const k = KINDS[choice.kind];
+  $('#variants').innerHTML = k?.variants ? k.variants.map(([label, val], i) =>
+    `<button type="button" data-variant="${i}" aria-pressed="${i === choice.variant}">${val.startsWith('#') ? `<span class="sw" style="background:${val}"></span>` : ''}${esc(label)}</button>`).join('') : '';
+  const needs = !!k?.note;
+  if (needs && choice.phrase < 0) choice.phrase = 0;
+  $('#words-legend').textContent = needs ? 'What it says' : 'A few words to leave with it';
+  $('#words').innerHTML = (needs ? [] : [[-1, 'No words. Just the gesture.']]).concat(PHRASES.map((p, i) => [i, p])).map(([i, p]) =>
+    `<label><input type="radio" name="phrase" value="${i}"${i === choice.phrase ? ' checked' : ''}>${esc(p)}</label>`).join('');
+  renderPreview();
+}
+function renderPreview() {
+  const ok = !!choice.kind;
+  $('#carry').disabled = !ok;
+  $('#preview').innerHTML = ok
+    ? `<strong>${esc(capitalize(describe(choice.kind, choice.variant)))}</strong>, from ${esc(SIGS[choice.sig])}.${choice.phrase >= 0 ? ` <em>“${esc(PHRASES[choice.phrase])}”</em>` : ''}`
+    : 'Pick something above.';
+}
+$('#sig').innerHTML = SIGS.map((s, i) => `<option value="${i}">${esc(s)}</option>`).join('');
+$('#sig').value = choice.sig = Math.min(choice.sig, SIGS.length - 1);
+$('#sig').onchange = (e) => { choice.sig = +e.target.value; store.set('sig', choice.sig); renderPreview(); };
+// renderPicker rebuilds the buttons, so put focus back on the one that was pressed.
+const repick = (sel) => { renderPicker(); $(sel, picker)?.focus(); };
+$('#tabs').onclick = (e) => { const b = e.target.closest('[data-cat]'); if (b) { if (b.dataset.cat !== choice.cat) choice.kind = null; choice.cat = b.dataset.cat; repick(`[data-cat="${choice.cat}"]`); } };
+$('#kinds').onclick = (e) => { const b = e.target.closest('[data-kind]'); if (b) { choice.kind = b.dataset.kind; choice.variant = 0; repick(`[data-kind="${choice.kind}"]`); } };
+$('#variants').onclick = (e) => { const b = e.target.closest('[data-variant]'); if (b) { choice.variant = +b.dataset.variant; repick(`[data-variant="${choice.variant}"]`); } };
+picker.addEventListener('close', () => { if (placing) $('#auto').focus({ preventScroll: true }); });
+$('#words').onchange = (e) => { choice.phrase = +e.target.value; renderPreview(); };
+$('#lay').onclick = openPicker;
+function openPicker() { if (placing) return; renderPicker(); picker.showModal(); }
+$('#picker-form').onsubmit = () => { if (choice.kind) startPlacing(); };
+for (const d of document.querySelectorAll('dialog')) {
+  d.addEventListener('click', (e) => { if (e.target === d || e.target.closest('[data-close]')) d.close(); });
+}
+
+// ── Placing ────────────────────────────────────────────────────────────
+let placing = null, pending = null, lastPointer = 'mouse';
+const ghost = $('#ghost');
+function startPlacing() {
+  placing = { kind: choice.kind, variant: choice.variant, phrase: choice.phrase, sig: choice.sig };
+  pending = null;
+  const html = art(placing.kind, placing.variant);
+  ghost.innerHTML = html; $('#hand').innerHTML = html;
+  $('#confirm').hidden = true; $('#place-hint').textContent = 'Tap the grass where you want to leave it.';
+  scene.classList.add('placing'); $('#strip').classList.add('placing');
+  hideTip();
+  scene.scrollIntoView({ behavior: glide, block: 'end' });
+  if (!picker.open) $('#auto').focus({ preventScroll: true });
+}
+function stopPlacing() {
+  const had = !!placing;
+  placing = pending = null;
+  scene.classList.remove('placing'); $('#strip').classList.remove('placing'); ghost.classList.remove('on');
+  if (had) $('#lay').focus({ preventScroll: true });
+}
+function placeAt(x, y) {
+  const o = { ...placing, x: Math.round(Math.max(0, Math.min(999, x))), y: Math.round(Math.max(0, Math.min(999, y))) };
+  stopPlacing();
+  if (validOffering(o)) lay(o);
+}
+const moveGhost = (e) => { const b = scene.getBoundingClientRect(); ghost.style.left = e.clientX - b.left + 'px'; ghost.style.top = e.clientY - b.top + 'px'; ghost.classList.add('on'); };
+itemsEl.addEventListener('pointerdown', (e) => { lastPointer = e.pointerType || 'mouse'; });
+itemsEl.addEventListener('pointermove', (e) => { if (placing && e.pointerType === 'mouse') moveGhost(e); });
+itemsEl.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') ghost.classList.remove('on'); });
+let stackKey = '', stackAt = 0;
+itemsEl.addEventListener('click', (e) => {
+  if (!placing) {
+    // Offerings overlap, so repeat taps on one spot walk down through the pile.
+    const stack = [...new Set(document.elementsFromPoint(e.clientX, e.clientY).map((n) => n.closest('.it')).filter(Boolean))];
+    if (!stack.length) return;
+    const key = stack.map((n) => n.dataset.id).join();
+    stackAt = key === stackKey ? (stackAt + 1) % stack.length : 0;
+    stackKey = key;
+    return tipFor(stack[stackAt]);
+  }
+  const r = itemsEl.getBoundingClientRect();
+  const spot = { x: ((e.clientX - r.left) / r.width * 100 - 5) / 90 * 999, y: ((e.clientY - r.top) / r.height * 100 - 10) / 84 * 999 };
+  if (lastPointer === 'mouse') return placeAt(spot.x, spot.y);
+  // Touch has no hover preview and the altar is shared, so the first tap only sets it down to look.
+  pending = spot; moveGhost(e);
+  $('#confirm').hidden = false; $('#place-hint').textContent = 'There? Tap elsewhere to move it.';
+});
+$('#confirm').onclick = () => placing && pending && placeAt(pending.x, pending.y);
+$('#auto').onclick = () => placing && placeAt(Math.random() * 999, 120 + Math.random() ** 1.4 * 860);
+$('#cancel').onclick = stopPlacing;
+
+// ── Sky ────────────────────────────────────────────────────────────────
+const PHASES = ['dawn', 'day', 'dusk', 'night'];
+const ICON = { dawn: '🌅', day: '☀', dusk: '🌇', night: '☾' };
+function setPhase(p) { document.body.dataset.phase = p; $('#phase').textContent = ICON[p]; }
+const hour = new Date().getHours();
+setPhase(hour < 5 ? 'night' : hour < 8 ? 'dawn' : hour < 17 ? 'day' : hour < 20 ? 'dusk' : 'night');
+$('#phase').onclick = () => setPhase(PHASES[(PHASES.indexOf(document.body.dataset.phase) + 1) % 4]);
+$('#stars').innerHTML = Array.from({ length: 70 }, (_, i) => {
+  const r = (n) => ((Math.sin(i * 127.1 + n * 311.7) * 43758.5453) % 1 + 1) % 1;   // same sky for everyone
+  return `<i style="left:${(r(1) * 100).toFixed(1)}%;top:${(r(2) * 100).toFixed(1)}%;opacity:${(.4 + r(3) * .6).toFixed(2)};animation-delay:-${(r(4) * 4).toFixed(1)}s"></i>`;
+}).join('');
+
+$('#ground').innerHTML = Array.from({ length: 46 }, (_, i) => {
+  const r = (n) => ((Math.sin(i * 91.7 + n * 47.3) * 9631.77) % 1 + 1) % 1, y = r(2);
+  return `<svg class="tuft" viewBox="0 0 14 10" style="left:${(4 + r(1) * 92).toFixed(1)}%;top:${(5 + y * 88).toFixed(1)}%;scale:${(0.8 + y * 0.9).toFixed(2)}"><path d="M2 10Q3 4 1 0M7 10V1M12 10Q11 4 13 1"/></svg>`;
+}).join('');
+
+// ── Keepsakes ──────────────────────────────────────────────────────────
+$('#u-atom').textContent = here + '/feed.atom';
+$('#u-rss').textContent = here + '/feed.rss';
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('.copy');
+  if (!b) return;
+  const text = b.previousElementSibling.textContent;
+  try { await navigator.clipboard.writeText(text); b.textContent = 'copied'; }
+  catch { b.textContent = 'select it'; getSelection().selectAllChildren(b.previousElementSibling); }
+  setTimeout(() => { b.textContent = 'copy'; }, 1600);
+});
+$('#opml').onclick = () => {
+  const opml = `<?xml version="1.0" encoding="UTF-8"?>
+<opml version="1.0">
+  <head><title>Subscriptions from the Google Reader memorial</title></head>
+  <body>
+    <outline text="In memoriam" title="In memoriam">
+      <outline type="rss" text="Offerings for Google Reader" title="Offerings for Google Reader" xmlUrl="${here}/feed.atom" htmlUrl="${here}/"/>
+      <outline type="rss" text="Official Google Reader Blog" title="Official Google Reader Blog" xmlUrl="http://googlereader.blogspot.com/feeds/posts/default" htmlUrl="http://googlereader.blogspot.com/"/>
+    </outline>
+  </body>
+</opml>
+`;
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([opml], { type: 'text/x-opml' })), download: 'subscriptions.xml' });
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast('subscriptions.xml: import it anywhere.');
+};
+
+// ── Toast ──────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 3800);
+}
+
+// ── Keyboard ───────────────────────────────────────────────────────────
+const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
+let konami = 0, gPending = 0;
+let keysOn = store.get('keys', true);
+const showKeys = () => { $('#keys').textContent = `Shortcuts: ${keysOn ? 'on' : 'off'}`; $('#keys').setAttribute('aria-pressed', keysOn); };
+showKeys();
+$('#keys').onclick = () => { keysOn = !keysOn; store.set('keys', keysOn); showKeys(); };
+$('#helpbtn').onclick = () => $('#help').showModal();
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && placing) return stopPlacing();
+  if (!keysOn || placing || e.ctrlKey || e.metaKey || e.altKey || document.querySelector('dialog[open]')) return;
+  if (e.target.closest('input, select, textarea')) return;
+
+  konami = e.key === KONAMI[konami] ? konami + 1 : e.key === KONAMI[0] ? 1 : 0;
+  if (konami === KONAMI.length) {
+    konami = 0;
+    $('#ninja').classList.toggle('out');
+    scene.scrollIntoView({ behavior: glide, block: 'start' });
+    return toast('Ninja mode. Just like June 2008.');
+  }
+  if (konami > 1 && e.key.startsWith('Arrow')) e.preventDefault();   // do not scroll the page mid-code
+  if (konami > 8) return;      // the b in ↑↑↓↓←→←→ba is not a shortcut
+
+  const g = Date.now() - gPending < 1200;
+  gPending = 0;
+  const onButton = e.target.closest('button, a');
+  switch (e.key) {
+    case 'j': step(1, true); break;
+    case 'k': step(-1, true); break;
+    case 'n': step(1, false); break;
+    case 'p': step(-1, false); break;
+    case 'o': if (selected) select(selected, openId !== selected); break;
+    case 'Enter': if (onButton || !selected) return; select(selected, openId !== selected); break;
+    case 's': if (g) { filter = 'star'; renderList(); } else if (selected) toggleStar(selected); break;
+    case 'm': if (selected) { read.has(selected) ? read.delete(selected) : read.add(selected); saveSets(); renderList(); } break;
+    case 'A': markAll(); break;
+    case 'a': if (g) { filter = 'all'; renderList(); } break;
+    case 'g': gPending = Date.now(); break;
+    case 'v': if (selected) findOnGrass(selected); break;
+    case 'r': refresh(true); break;
+    case 'l': openPicker(); break;
+    case '?': $('#help').showModal(); break;
+    default: return;
+  }
+  e.preventDefault();
+});
+
+// ── Go ─────────────────────────────────────────────────────────────────
+await refresh(false);
+const linked = location.hash.startsWith('#o-') && location.hash.slice(3);
+if (linked && items.some((it) => it[0] === linked)) { select(linked, true); setTimeout(() => findOnGrass(linked), 400); }
+setInterval(() => { if (!document.hidden && !placing && !document.querySelector('dialog[open]')) refresh(false); }, 45000);
+let resizeTimer;
+addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { altarSig = ''; renderAltar(); }, 200); });
+</script>
+</body>
+</html>
